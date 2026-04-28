@@ -19,11 +19,11 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('admin') === 'true') {
-      setCurrentStep('admin');
-    }
-  }, []);
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('admin') === 'true') {
+    setCurrentStep('admin');
+  }
+}, []);
 
   const handleStartApplication = () => {
     setCurrentStep('credit-type');
