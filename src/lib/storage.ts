@@ -1,14 +1,11 @@
 import { supabase } from './supabase';
 
-export async function uploadImage(file: File, bucketName: string, path: string): Promise<string> {
+export async function uploadImage(file: File, bucket: string, path: string): Promise<string> {
   const fileExt = file.name.split('.').pop();
   const fileName = `${path}-${Date.now()}.${fileExt}`;
 
-  // Mantenemos forzado el bucket que sabemos que funciona
-  const targetBucket = 'archivos';
-
   const { data, error } = await supabase.storage
-    .from(targetBucket)
+    .from(bucket)
     .upload(fileName, file, {
       cacheControl: '3600',
       upsert: false
@@ -19,8 +16,8 @@ export async function uploadImage(file: File, bucketName: string, path: string):
   }
 
   const { data: urlData } = supabase.storage
-    .from(targetBucket)
-    .getPublicUrl(fileName);
+    .from(bucket)
+    .getPublicUrl(data.path);
 
   return urlData.publicUrl;
 }
