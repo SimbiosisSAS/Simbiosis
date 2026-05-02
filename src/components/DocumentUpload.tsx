@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ApplicationFormData } from '../types';
-import { ArrowRight, ArrowLeft, Upload, Check } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Upload, Check, Lock, Shield } from 'lucide-react';
 
 interface DocumentUploadProps {
   formData: ApplicationFormData;
@@ -36,7 +36,7 @@ export default function DocumentUpload({ formData, onSubmit, onBack, isLoading =
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        setErrors(prev => ({ ...prev, [type]: 'Por favor selecciona una imagen válida' }));
+        setErrors(prev => ({ ...prev, [type]: 'Por favor selecciona una imagen valida' }));
         return;
       }
       if (file.size > 5 * 1024 * 1024) {
@@ -56,8 +56,8 @@ export default function DocumentUpload({ formData, onSubmit, onBack, isLoading =
 
   const validateDocuments = () => {
     const newErrors: Record<string, string> = {};
-    if (!images.idFront) newErrors.idFront = 'Foto de cédula frontal es requerida';
-    if (!images.idBack) newErrors.idBack = 'Foto de cédula trasera es requerida';
+    if (!images.idFront) newErrors.idFront = 'Foto de cedula frontal es requerida';
+    if (!images.idBack) newErrors.idBack = 'Foto de cedula trasera es requerida';
     if (!images.selfie) newErrors.selfie = 'Foto de rostro es requerida';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -84,7 +84,7 @@ export default function DocumentUpload({ formData, onSubmit, onBack, isLoading =
     description: string;
   }) => (
     <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-3">{label} *</label>
+      <label className="block text-sm font-semibold text-navy-800 mb-2">{label} *</label>
       <div className="relative">
         <input
           type="file"
@@ -96,98 +96,102 @@ export default function DocumentUpload({ formData, onSubmit, onBack, isLoading =
         />
         <label
           htmlFor={type}
-          className={`block border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+          className={`block border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200 ${
             previews[type]
-              ? 'border-green-300 bg-green-50'
+              ? 'border-emerald-300 bg-emerald-50/50'
               : errors[type]
-              ? 'border-red-300 bg-red-50'
-              : 'border-gray-300 bg-gray-50 hover:border-orange-500 hover:bg-orange-50'
+              ? 'border-red-300 bg-red-50/50'
+              : 'border-slate-200 bg-slate-50/50 hover:border-emerald-400 hover:bg-emerald-50/30'
           } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           {previews[type] ? (
             <div className="flex flex-col items-center">
-              <Check className="w-8 h-8 text-green-600 mb-2" />
-              <p className="text-sm font-semibold text-green-700">Imagen subida correctamente</p>
+              <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center mb-2">
+                <Check className="w-5 h-5 text-emerald-600" />
+              </div>
+              <p className="text-sm font-semibold text-emerald-700">Imagen subida correctamente</p>
             </div>
           ) : (
             <div className="flex flex-col items-center">
-              <Upload className="w-8 h-8 text-gray-400 mb-2" />
-              <p className="text-sm font-semibold text-gray-700">{label}</p>
-              <p className="text-xs text-gray-500">{description}</p>
+              <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mb-2">
+                <Upload className="w-5 h-5 text-slate-400" />
+              </div>
+              <p className="text-sm font-semibold text-navy-800">{label}</p>
+              <p className="text-xs text-slate-500 mt-1">{description}</p>
             </div>
           )}
         </label>
       </div>
       {previews[type] && (
-        <div className="mt-4 relative rounded-lg overflow-hidden h-40 bg-gray-100">
+        <div className="mt-3 relative rounded-xl overflow-hidden h-40 bg-slate-100 border border-slate-200">
           <img src={previews[type]!} alt={label} className="w-full h-full object-cover" />
         </div>
       )}
-      {errors[type] && <p className="text-red-600 text-sm mt-2">{errors[type]}</p>}
+      {errors[type] && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors[type]}</p>}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 pt-32 pb-12">
+    <div className="min-h-screen bg-slate-50 pt-28 pb-16">
       <div className="max-w-2xl mx-auto px-6">
         <button
           onClick={onBack}
           disabled={isLoading}
-          className={`mb-8 flex items-center gap-2 font-medium transition-colors ${
-            isLoading ? 'text-gray-400 cursor-not-allowed' : 'text-gray-600 hover:text-gray-900'
+          className={`mb-8 flex items-center gap-2 font-medium transition-colors group ${
+            isLoading ? 'text-slate-400 cursor-not-allowed' : 'text-slate-600 hover:text-navy-700'
           }`}
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           Volver
         </button>
 
-        <div className="bg-white rounded-3xl shadow-lg p-8 md:p-12 border border-gray-100">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 md:p-10">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Sube tus Documentos</h1>
-            <p className="text-gray-600">Necesitamos tus documentos de identidad para completar tu solicitud</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-navy-900 mb-2">Sube tus documentos</h1>
+            <p className="text-slate-600 text-sm">Necesitamos tus documentos de identidad para completar tu solicitud</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <DocumentUploadField
               type="idFront"
-              label="Cédula - Lado Frontal"
-              description="Captura clara del frente de tu cédula"
+              label="Cedula - Lado Frontal"
+              description="Captura clara del frente de tu cedula"
             />
 
             <DocumentUploadField
               type="idBack"
-              label="Cédula - Lado Trasero"
-              description="Captura clara del reverso de tu cédula"
+              label="Cedula - Lado Trasero"
+              description="Captura clara del reverso de tu cedula"
             />
 
             <DocumentUploadField
               type="selfie"
               label="Foto de Rostro"
-              description="Selfie clara de tu rostro"
+              description="Selfie clara de tu rostro para verificacion"
             />
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-700">
-                <span className="font-semibold">Requisitos:</span> Las imágenes deben ser claras, legibles y sin obstrucciones. Máximo 5MB cada una.
-              </p>
+            <div className="bg-navy-50 border border-navy-200 rounded-xl p-4 flex items-start gap-3">
+              <Shield className="w-5 h-5 text-navy-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-navy-800">Tus datos estan protegidos</p>
+                <p className="text-xs text-navy-600 mt-1">Las imagenes se transmiten con encriptacion AES-256 y se almacenan de forma segura. Maximo 5MB cada una.</p>
+              </div>
             </div>
 
-            <div className="flex gap-4 pt-8">
+            <div className="flex gap-4 pt-6">
               <button
                 type="button"
                 onClick={onBack}
                 disabled={isLoading}
-                className={`flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 font-semibold rounded-lg transition-colors ${
-                  isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
-                }`}
+                className={`flex-1 btn-secondary ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                Atrás
+                Atras
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`flex-1 bg-gradient-to-r from-red-600 to-orange-500 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 hover:shadow-lg flex items-center justify-center gap-2 ${
-                  isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:from-red-700 hover:to-orange-600'
+                className={`flex-1 btn-primary inline-flex items-center justify-center gap-2 ${
+                  isLoading ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isLoading ? 'Procesando...' : 'Completar Solicitud'}

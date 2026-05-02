@@ -1,5 +1,5 @@
 import { CreditType } from '../types';
-import { TrendingUp, Building2, Target, Zap, ArrowRight } from 'lucide-react';
+import { TrendingUp, Building2, Target, Zap, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface CreditTypeSelectorProps {
   onSelect: (type: CreditType) => void;
@@ -10,70 +10,84 @@ export default function CreditTypeSelector({ onSelect, onBack }: CreditTypeSelec
   const creditTypes = [
     {
       id: 'ENTREPRENEURSHIP' as CreditType,
-      title: 'Crédito para Emprendedores',
-      description: 'Impulsa el crecimiento de tu empresa con nuestro crédito diseñado para emprendedores. Acceso rápido y requisitos flexibles.',
+      title: 'Credito para Emprendedores',
+      description: 'Impulsa el crecimiento de tu empresa con nuestro credito disenado para emprendedores. Acceso rapido y requisitos flexibles.',
       icon: TrendingUp,
-      color: 'from-red-600 to-red-700',
-      bgColor: 'bg-red-50'
+      gradient: 'from-navy-700 to-navy-800',
+      bgHover: 'hover:border-navy-600/50',
+      features: ['Aprobacion 24-48h', 'Montos flexibles']
     },
     {
       id: 'REAL_ESTATE' as CreditType,
-      title: 'Crédito Inmobiliario',
-      description: 'Realiza tu sueño de tener una propiedad con nuestro crédito inmobiliario. Plazos extendidos y tasas competitivas.',
+      title: 'Credito Inmobiliario',
+      description: 'Realiza tu sueno de tener una propiedad con plazos extendidos y tasas competitivas respaldadas por analisis especializado.',
       icon: Building2,
-      color: 'from-orange-600 to-orange-700',
-      bgColor: 'bg-orange-50'
+      gradient: 'from-emerald-500 to-emerald-600',
+      bgHover: 'hover:border-emerald-500/50',
+      features: ['Plazos hasta 20 anos', 'Cobertura de seguros']
     },
     {
       id: 'FREE_INVESTMENT' as CreditType,
-      title: 'Crédito de Libre Inversión',
-      description: 'Invierte en lo que quieras sin restricciones. Desde consumo personal hasta proyectos empresariales.',
+      title: 'Credito de Libre Inversion',
+      description: 'Invierte en lo que quieras sin restricciones. Desde consumo personal hasta proyectos empresariales de gran escala.',
       icon: Target,
-      color: 'from-red-500 to-red-600',
-      bgColor: 'bg-red-50'
+      gradient: 'from-navy-600 to-emerald-500',
+      bgHover: 'hover:border-emerald-500/50',
+      features: ['Sin restricciones', 'Desembolso inmediato']
     },
     {
       id: 'MICROCREDIT' as CreditType,
-      title: 'Microcrédito',
-      description: 'Acceso rápido a crédito para pequeños negocios. Procesos ágiles y aprobación en tiempo récord.',
+      title: 'Microcredito',
+      description: 'Acceso rapido a credito para pequenos negocios. Procesos agiles y aprobacion en tiempo record con requisitos minimos.',
       icon: Zap,
-      color: 'from-orange-500 to-orange-600',
-      bgColor: 'bg-orange-50'
+      gradient: 'from-emerald-600 to-navy-700',
+      bgHover: 'hover:border-emerald-500/50',
+      features: ['Requisitos minimos', 'Desde $500K COP']
     }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 pt-32 pb-12">
-      <div className="max-w-7xl mx-auto px-6">
+    <div className="min-h-screen bg-slate-50 pt-28 pb-16">
+      <div className="container-main">
         <button
           onClick={onBack}
-          className="mb-8 text-gray-600 hover:text-gray-900 font-medium transition-colors"
+          className="mb-8 flex items-center gap-2 text-slate-600 hover:text-navy-700 font-medium transition-colors group"
         >
-          ← Volver
+          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+          Volver
         </button>
 
         <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">Elige tu Tipo de Crédito</h1>
-          <p className="text-xl text-gray-600">Selecciona la opción que mejor se adapte a tus necesidades</p>
+          <div className="badge bg-emerald-50 border border-emerald-200 text-emerald-700 mb-6 mx-auto">
+            <Zap className="w-3.5 h-3.5" />
+            <span>Soluciones</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold text-navy-900 mb-4 tracking-tight">Elige tu tipo de credito</h1>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">Selecciona la opcion que mejor se adapte a las necesidades de tu empresa</p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-6">
           {creditTypes.map((credit) => {
             const Icon = credit.icon;
             return (
               <button
                 key={credit.id}
                 onClick={() => onSelect(credit.id)}
-                className={`${credit.bgColor} border-2 border-gray-200 hover:border-orange-500 rounded-2xl p-8 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-2 group`}
+                className={`bg-white border border-slate-200 rounded-2xl p-8 text-left transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group ${credit.bgHover}`}
               >
-                <div className={`inline-flex bg-gradient-to-r ${credit.color} text-white w-16 h-16 rounded-xl items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                  <Icon className="w-8 h-8" />
+                <div className={`inline-flex bg-gradient-to-r ${credit.gradient} text-white w-14 h-14 rounded-xl items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-sm`}>
+                  <Icon className="w-7 h-7" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-3">{credit.title}</h3>
-                <p className="text-gray-600 mb-6 leading-relaxed">{credit.description}</p>
-                <div className="flex items-center text-orange-600 font-semibold group-hover:translate-x-1 transition-transform">
+                <h3 className="text-xl font-bold text-navy-900 mb-3">{credit.title}</h3>
+                <p className="text-slate-600 text-sm leading-relaxed mb-5">{credit.description}</p>
+                <div className="flex items-center gap-4 mb-5">
+                  {credit.features.map((feature, idx) => (
+                    <span key={idx} className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">{feature}</span>
+                  ))}
+                </div>
+                <div className="flex items-center text-emerald-600 font-semibold text-sm group-hover:translate-x-1 transition-transform">
                   Continuar
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <ArrowRight className="w-4 h-4 ml-1" />
                 </div>
               </button>
             );

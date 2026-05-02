@@ -1,418 +1,861 @@
-import { useState } from 'react';
-import { ArrowRight, TrendingUp, Building2, Target, Zap, Shield, BarChart3, Users, Globe, MessageCircle, ChevronRight, CheckCircle, Sparkles, Rocket } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+  ArrowRight, TrendingUp, Building2, Target, Zap, Shield, BarChart3,
+  Users, Globe, MessageCircle, ChevronRight, CheckCircle, Sparkles,
+  Rocket, Lock, FileCheck, Server, Eye, Award, BookOpen, Phone,
+  Mail, MapPin, ChevronDown, Play, ArrowUpRight, Cpu, Landmark
+} from 'lucide-react';
 
 interface HomePageProps {
   onStartApplication: () => void;
 }
 
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [threshold]);
+
+  return { ref, isInView };
+}
+
+function AnimatedSection({ children, className = '', delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+  const { ref, isInView } = useInView();
+  return (
+    <div
+      ref={ref}
+      className={`transition-all duration-700 ease-out ${isInView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function HomePage({ onStartApplication }: HomePageProps) {
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const handleWhatsAppClick = () => {
     window.open('https://wa.me/57', '_blank');
   };
 
+  const navLinks = [
+    { href: '#soluciones', label: 'Soluciones' },
+    { href: '#seguridad', label: 'Seguridad' },
+    { href: '#nosotros', label: 'Nosotros' },
+    { href: '#recursos', label: 'Recursos' },
+  ];
+
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      <nav className="fixed top-0 w-full bg-white/95 backdrop-blur-md border-b border-brand-orange/20 z-50">
-        <div className="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-50">
+      {/* Navigation */}
+      <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-white/95 backdrop-blur-xl shadow-sm border-b border-slate-200/60'
+          : 'bg-transparent'
+      }`}>
+        <div className="container-main flex items-center justify-between h-18 py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-brand-red to-brand-orange rounded-lg flex items-center justify-center">
+            <div className="w-9 h-9 bg-gradient-to-br from-navy-700 to-emerald-500 rounded-xl flex items-center justify-center shadow-md shadow-navy-900/20">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-semibold text-gray-900">Simbiosis</span>
+            <span className="font-bold text-xl text-navy-900 tracking-tight">Simbiosis</span>
           </div>
-          <div className="hidden lg:flex items-center gap-12">
-            <a href="#servicios" className="text-gray-600 hover:text-brand-red transition-colors font-medium text-sm">Servicios</a>
-            <a href="#impacto" className="text-gray-600 hover:text-brand-red transition-colors font-medium text-sm">Impacto</a>
-            <a href="#por-que" className="text-gray-600 hover:text-brand-red transition-colors font-medium text-sm">¿Por Qué</a>
+
+          <div className="hidden lg:flex items-center gap-1">
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="btn-ghost"
+              >
+                {link.label}
+              </a>
+            ))}
           </div>
+
+          <div className="hidden lg:flex items-center gap-3">
+            <button className="btn-ghost font-semibold text-navy-700">
+              Iniciar Sesion
+            </button>
+            <button
+              onClick={onStartApplication}
+              className="btn-primary !px-6 !py-2.5"
+            >
+              Crear Cuenta
+            </button>
+          </div>
+
           <button
-            onClick={onStartApplication}
-            className="bg-gradient-to-r from-brand-red to-brand-orange hover:from-brand-red/90 hover:to-brand-orange/90 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition-all hover:shadow-lg hover:shadow-brand-red/30"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-colors"
           >
-            Solicitar Crédito
+            <div className="w-5 h-5 flex flex-col justify-center gap-1.5">
+              <span className={`block h-0.5 bg-navy-900 transition-all duration-300 ${mobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+              <span className={`block h-0.5 bg-navy-900 transition-all duration-300 ${mobileMenuOpen ? 'opacity-0' : ''}`} />
+              <span className={`block h-0.5 bg-navy-900 transition-all duration-300 ${mobileMenuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+            </div>
           </button>
         </div>
+
+        {mobileMenuOpen && (
+          <div className="lg:hidden bg-white border-t border-slate-200 shadow-lg">
+            <div className="container-main py-4 space-y-2">
+              {navLinks.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block px-4 py-3 rounded-lg text-slate-700 hover:bg-slate-50 font-medium"
+                >
+                  {link.label}
+                </a>
+              ))}
+              <div className="pt-4 border-t border-slate-200 space-y-2">
+                <button className="w-full text-left px-4 py-3 rounded-lg text-navy-700 font-semibold hover:bg-slate-50">
+                  Iniciar Sesion
+                </button>
+                <button
+                  onClick={onStartApplication}
+                  className="w-full btn-primary text-center"
+                >
+                  Crear Cuenta
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
+      {/* WhatsApp Button */}
       <button
         onClick={handleWhatsAppClick}
-        className="fixed bottom-8 right-8 bg-gradient-to-r from-brand-red to-brand-orange hover:from-brand-red/90 hover:to-brand-orange/90 text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:shadow-brand-red/30 transition-all z-40 flex items-center justify-center hover:scale-110"
+        className="fixed bottom-8 right-8 bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-2xl shadow-lg hover:shadow-xl hover:shadow-emerald-500/25 transition-all z-40 flex items-center justify-center hover:scale-105 active:scale-95"
         title="Contáctanos por WhatsApp"
       >
         <MessageCircle className="w-6 h-6" />
       </button>
 
       <main>
-        <section className="relative pt-32 pb-24">
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-brand-orange/5 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-96 h-96 bg-brand-red/5 rounded-full blur-3xl"></div>
+        {/* Hero Section */}
+        <section className="relative pt-28 pb-20 md:pt-40 md:pb-32 overflow-hidden bg-gradient-to-b from-navy-950 via-navy-900 to-navy-800">
+          <div className="absolute inset-0">
+            <div className="absolute top-0 right-1/4 w-[600px] h-[600px] bg-emerald-500/8 rounded-full blur-[120px]" />
+            <div className="absolute bottom-0 left-1/4 w-[500px] h-[500px] bg-navy-400/10 rounded-full blur-[100px]" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-emerald-500/3 rounded-full blur-[150px]" />
           </div>
 
-          <div className="max-w-7xl mx-auto px-8 relative z-10">
-            <div className="grid lg:grid-cols-2 gap-16 items-center">
-              <div>
-                <div className="inline-flex items-center gap-2 bg-brand-red/10 backdrop-blur-sm px-4 py-2 rounded-full mb-8 border border-brand-red/30">
-                  <Rocket className="w-4 h-4 text-brand-red" />
-                  <span className="text-sm font-semibold text-brand-red uppercase tracking-widest">Próxima Generación de Finanzas</span>
+          <div className="absolute inset-0 opacity-[0.03]" style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+
+          <div className="container-main relative z-10">
+            <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+              <div className="animate-fade-in">
+                <div className="badge bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-8">
+                  <Rocket className="w-3.5 h-3.5" />
+                  <span>Plataforma Fintech de Nueva Generacion</span>
                 </div>
 
-                <h1 className="text-7xl font-bold text-gray-900 leading-tight mb-6 bg-clip-text text-transparent bg-gradient-to-r from-brand-red via-brand-orange to-brand-coral">
-                  Financiamiento Inteligente
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold text-white leading-[1.1] mb-6 tracking-tight text-balance">
+                  Financiamiento
+                  <span className="block gradient-text">Inteligente</span>
+                  para Empresas
                 </h1>
-                <p className="text-lg text-gray-600 leading-relaxed mb-8 max-w-lg">
-                  Plataforma de crédito corporativo impulsada por IA. Aprobación rápida, términos flexibles y soluciones diseñadas para empresas en crecimiento en Latinoamérica.
+
+                <p className="text-lg text-slate-300 leading-relaxed mb-10 max-w-lg">
+                  Creditos corporativos impulsados por IA con aprobacion rapida, terminos flexibles y soluciones disenadas para empresas en crecimiento en Latinoamerica.
                 </p>
-                <div className="flex gap-4">
+
+                <div className="flex flex-col sm:flex-row gap-4 mb-12">
                   <button
                     onClick={onStartApplication}
-                    className="bg-gradient-to-r from-brand-red to-brand-orange hover:from-brand-red/90 hover:to-brand-orange/90 text-white px-8 py-3 rounded-lg text-sm font-semibold transition-all hover:shadow-lg hover:shadow-brand-red/30 inline-flex items-center gap-2"
+                    className="btn-primary !px-8 !py-4 !text-base inline-flex items-center justify-center gap-2"
                   >
-                    Solicitar Crédito
-                    <ChevronRight className="w-4 h-4" />
+                    Solicitar Credito
+                    <ArrowRight className="w-5 h-5" />
                   </button>
                   <button
                     onClick={handleWhatsAppClick}
-                    className="border border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 px-8 py-3 rounded-lg text-sm font-semibold transition-all"
+                    className="border-2 border-slate-500/40 text-white hover:bg-white/5 hover:border-slate-400/60 px-8 py-4 rounded-xl text-base font-semibold transition-all duration-300 inline-flex items-center justify-center gap-2"
                   >
-                    Contactar
+                    <Play className="w-5 h-5" />
+                    Ver Demo
                   </button>
+                </div>
+
+                <div className="flex items-center gap-6 text-sm text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span>Sin costos ocultos</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span>Aprobacion 24h</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="lg:flex justify-end hidden">
+              <div className="lg:flex justify-end hidden animate-slide-in-right">
                 <div className="w-full max-w-md relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-brand-red to-brand-orange rounded-2xl blur-2xl opacity-15"></div>
-                  <div className="relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-12 flex items-center justify-center h-80 border border-gray-200">
-                    <div className="text-center">
-                      <div className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-brand-red to-brand-orange mb-2">∞</div>
-                      <p className="text-gray-600 text-sm font-medium">Soluciones Infinitas</p>
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-navy-500/20 rounded-3xl blur-2xl" />
+
+                  <div className="relative glass-card-dark p-8 space-y-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Dashboard</span>
+                      <span className="text-xs text-emerald-400 font-medium">En vivo</span>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="bg-navy-900/60 rounded-xl p-4 border border-navy-700/30">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm text-slate-400">Capital desplegado</span>
+                          <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <p className="text-2xl font-bold text-white">$7.2M</p>
+                        <div className="mt-2 h-1.5 bg-navy-700 rounded-full overflow-hidden">
+                          <div className="h-full w-3/4 bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full" />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-navy-900/60 rounded-xl p-4 border border-navy-700/30">
+                          <span className="text-xs text-slate-400">Tasa aprobacion</span>
+                          <p className="text-xl font-bold text-emerald-400 mt-1">85%</p>
+                        </div>
+                        <div className="bg-navy-900/60 rounded-xl p-4 border border-navy-700/30">
+                          <span className="text-xs text-slate-400">Clientes activos</span>
+                          <p className="text-xl font-bold text-white mt-1">127</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-navy-900/60 rounded-xl p-4 border border-navy-700/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">Solicitudes hoy</span>
+                          <span className="text-xs text-emerald-400 font-medium">+12%</span>
+                        </div>
+                        <div className="flex items-end gap-1 mt-3 h-10">
+                          {[40, 65, 45, 80, 55, 70, 90, 60, 75, 85, 50, 95].map((h, i) => (
+                            <div
+                              key={i}
+                              className="flex-1 bg-gradient-to-t from-emerald-500/60 to-emerald-400/80 rounded-sm"
+                              style={{ height: `${h}%` }}
+                            />
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-slate-50 to-transparent" />
         </section>
 
-        <section className="py-20 border-y border-gray-200 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-8">
-            <div className="grid md:grid-cols-4 gap-12">
-              <div className="group">
-                <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-red to-brand-orange mb-2">$7M+</p>
-                <p className="text-gray-600 text-sm font-medium group-hover:text-gray-700 transition-colors">Capital Levantado en LATAM & Canadá</p>
-              </div>
-              <div className="group">
-                <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-red to-brand-orange mb-2">12+</p>
-                <p className="text-gray-600 text-sm font-medium group-hover:text-gray-700 transition-colors">Negocios Latinoamericanos Fortalecidos</p>
-              </div>
-              <div className="group">
-                <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-red to-brand-orange mb-2">3</p>
-                <p className="text-gray-600 text-sm font-medium group-hover:text-gray-700 transition-colors">Países Servidos</p>
-              </div>
-              <div className="group">
-                <p className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-brand-red to-brand-orange mb-2">98%</p>
-                <p className="text-gray-600 text-sm font-medium group-hover:text-gray-700 transition-colors">Satisfacción de Clientes</p>
-              </div>
+        {/* Partners / Trust Bar */}
+        <section className="py-12 border-b border-slate-200/60 bg-white">
+          <div className="container-main">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest text-center mb-8">
+              Respaldo institucional y regulatorio
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+              {[
+                { name: 'Banco de la Republica', icon: Landmark },
+                { name: 'Superfinanciera', icon: Shield },
+                { name: 'Fondo Nacional', icon: Building2 },
+                { name: 'Fintech Colombia', icon: Cpu },
+                { name: 'SEC Compliant', icon: FileCheck },
+              ].map((partner, idx) => {
+                const Icon = partner.icon;
+                return (
+                  <div key={idx} className="flex items-center gap-2 text-slate-400 hover:text-navy-700 transition-colors group">
+                    <Icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{partner.name}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        <section id="servicios" className="py-24">
-          <div className="max-w-7xl mx-auto px-8">
-            <div className="mb-16">
-              <div className="inline-flex items-center gap-2 bg-brand-orange/10 backdrop-blur-sm px-4 py-2 rounded-full mb-8 border border-brand-orange/30">
-                <Zap className="w-4 h-4 text-brand-orange" />
-                <span className="text-sm font-semibold text-brand-orange uppercase tracking-widest">Soluciones</span>
+        {/* Trust Metrics */}
+        <section className="section-padding bg-white">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
+                {[
+                  { value: '$7M+', label: 'Capital levantado en LATAM y Canada', icon: BarChart3 },
+                  { value: '12+', label: 'Negocios latinoamericanos fortalecidos', icon: Building2 },
+                  { value: '3', label: 'Paises servidos', icon: Globe },
+                  { value: '98%', label: 'Satisfaccion de clientes', icon: Users },
+                ].map((metric, idx) => {
+                  const Icon = metric.icon;
+                  return (
+                    <div key={idx} className="text-center group">
+                      <div className="inline-flex w-12 h-12 bg-emerald-50 rounded-xl items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+                        <Icon className="w-6 h-6 text-emerald-600" />
+                      </div>
+                      <p className="text-3xl md:text-4xl font-bold gradient-text-navy mb-2">{metric.value}</p>
+                      <p className="text-sm text-slate-500 font-medium leading-snug">{metric.label}</p>
+                    </div>
+                  );
+                })}
               </div>
-              <h2 className="text-5xl font-bold text-gray-900 mb-6">
-                Créditos Diseñados para Ti
-              </h2>
-              <p className="text-gray-600 text-lg max-w-2xl">
-                Desde emprendedores hasta empresas consolidadas, tenemos el producto de financiamiento perfecto para tu etapa.
-              </p>
-            </div>
+            </AnimatedSection>
+          </div>
+        </section>
 
-            <div className="grid md:grid-cols-2 gap-8">
+        {/* Solutions Section */}
+        <section id="soluciones" className="section-padding bg-slate-50">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="mb-16 max-w-2xl">
+                <div className="badge bg-emerald-50 border border-emerald-200 text-emerald-700 mb-6">
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Soluciones</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-navy-900 mb-6 tracking-tight text-balance">
+                  Creditos disenados para cada etapa de tu empresa
+                </h2>
+                <p className="text-lg text-slate-600 leading-relaxed">
+                  Desde emprendedores hasta empresas consolidadas, tenemos el producto de financiamiento perfecto para impulsar tu crecimiento.
+                </p>
+              </div>
+            </AnimatedSection>
+
+            <div className="grid md:grid-cols-2 gap-6">
               {[
                 {
-                  title: 'Crédito para Emprendedores',
-                  description: 'Capital estratégico para empresas en crecimiento con aprobación rápida.',
-                  features: ['Aprobación 24-48 horas', 'Montos flexibles', 'Asesoría dedicada'],
-                  icon: Rocket
+                  title: 'Credito para Emprendedores',
+                  description: 'Capital estrategico para empresas en crecimiento con aprobacion rapida y requisitos flexibles.',
+                  features: ['Aprobacion 24-48 horas', 'Montos flexibles', 'Asesoria dedicada'],
+                  icon: Rocket,
+                  accent: 'from-navy-700 to-navy-800'
                 },
                 {
-                  title: 'Crédito Inmobiliario',
-                  description: 'Financia tus proyectos inmobiliarios con plazos competitivos.',
-                  features: ['Plazos hasta 20 años', 'Cobertura de seguros', 'Análisis especializado'],
-                  icon: Building2
+                  title: 'Credito Inmobiliario',
+                  description: 'Financia tus proyectos inmobiliarios con plazos competitivos y cobertura de seguros.',
+                  features: ['Plazos hasta 20 anos', 'Cobertura de seguros', 'Analisis especializado'],
+                  icon: Building2,
+                  accent: 'from-emerald-500 to-emerald-600'
                 },
                 {
-                  title: 'Crédito de Libre Inversión',
-                  description: 'Capital flexible sin restricciones para maximizar tus operaciones.',
-                  features: ['Sin restricciones', 'Documentación simple', 'Desembolso inmediato'],
-                  icon: TrendingUp
+                  title: 'Credito de Libre Inversion',
+                  description: 'Capital flexible sin restricciones para maximizar tus operaciones empresariales.',
+                  features: ['Sin restricciones', 'Documentacion simple', 'Desembolso inmediato'],
+                  icon: TrendingUp,
+                  accent: 'from-navy-600 to-emerald-500'
                 },
                 {
-                  title: 'Microcrédito',
-                  description: 'Soluciones ágiles para pequeños negocios y emprendimientos.',
-                  features: ['Requisitos mínimos', 'Desembolso en 24h', 'Desde $500K'],
-                  icon: Target
+                  title: 'Microcredito',
+                  description: 'Soluciones agiles para pequenos negocios y emprendimientos con procesos simplificados.',
+                  features: ['Requisitos minimos', 'Desembolso en 24h', 'Desde $500K COP'],
+                  icon: Target,
+                  accent: 'from-emerald-600 to-navy-700'
                 }
               ].map((service, idx) => {
                 const IconComponent = service.icon;
                 return (
-                  <div key={idx} className="group relative">
-                    <div className="absolute inset-0 bg-gradient-to-r from-brand-red/10 to-brand-orange/10 rounded-xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    <div className="relative bg-white border border-gray-200 rounded-xl p-8 hover:border-brand-red/50 hover:shadow-lg transition-all">
-                      <div className="w-12 h-12 bg-gradient-to-br from-brand-red to-brand-orange rounded-lg flex items-center justify-center mb-4">
-                        <IconComponent className="w-6 h-6 text-white" />
+                  <AnimatedSection key={idx} delay={idx * 100}>
+                    <div className="group relative h-full">
+                      <div className="absolute inset-0 bg-gradient-to-br from-navy-700/5 to-emerald-500/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                      <div className="relative h-full bg-white border border-slate-200 rounded-2xl p-8 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-300">
+                        <div className={`w-12 h-12 bg-gradient-to-br ${service.accent} rounded-xl flex items-center justify-center mb-5 shadow-sm`}>
+                          <IconComponent className="w-6 h-6 text-white" />
+                        </div>
+                        <h3 className="text-xl font-bold text-navy-900 mb-3">{service.title}</h3>
+                        <p className="text-slate-600 text-sm leading-relaxed mb-6">{service.description}</p>
+                        <ul className="space-y-3">
+                          {service.features.map((feature, fidx) => (
+                            <li key={fidx} className="flex items-center gap-3">
+                              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                              <span className="text-sm text-slate-600">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="mt-6 pt-6 border-t border-slate-100">
+                          <button
+                            onClick={onStartApplication}
+                            className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1 group-hover:gap-2 transition-all"
+                          >
+                            Solicitar este credito
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <h3 className="text-xl font-semibold text-gray-900 mb-3">{service.title}</h3>
-                      <p className="text-gray-600 text-sm leading-relaxed mb-6">{service.description}</p>
-                      <ul className="space-y-3">
-                        {service.features.map((feature, fidx) => (
-                          <li key={fidx} className="flex items-center gap-3">
-                            <CheckCircle className="w-4 h-4 text-brand-orange flex-shrink-0" />
-                            <span className="text-sm text-gray-600">{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
-                  </div>
+                  </AnimatedSection>
                 );
               })}
             </div>
           </div>
         </section>
 
-        <section id="impacto" className="py-24 relative overflow-hidden bg-gray-50">
+        {/* Security Section */}
+        <section id="seguridad" className="section-padding bg-navy-950 relative overflow-hidden">
           <div className="absolute inset-0">
-            <div className="absolute top-0 left-1/3 w-96 h-96 bg-brand-red/5 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-brand-orange/5 rounded-full blur-3xl"></div>
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[120px]" />
+            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-navy-500/5 rounded-full blur-[100px]" />
           </div>
 
-          <div className="max-w-7xl mx-auto px-8 relative z-10">
-            <div className="mb-16">
-              <div className="inline-flex items-center gap-2 bg-brand-red/10 backdrop-blur-sm px-4 py-2 rounded-full mb-8 border border-brand-red/30">
-                <Globe className="w-4 h-4 text-brand-red" />
-                <span className="text-sm font-semibold text-brand-red uppercase tracking-widest">Impacto Global</span>
-              </div>
-              <h2 className="text-5xl font-bold text-gray-900 mb-6">
-                Transformando Finanzas en LATAM
-              </h2>
-            </div>
+          <div className="absolute inset-0 opacity-[0.02]" style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+            backgroundSize: '32px 32px'
+          }} />
 
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="bg-white border border-gray-200 rounded-xl p-8 hover:border-brand-red/50 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 bg-gradient-to-br from-brand-red to-brand-orange rounded-lg flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                  <Users className="w-6 h-6 text-white" />
+          <div className="container-main relative z-10">
+            <AnimatedSection>
+              <div className="text-center mb-16 max-w-3xl mx-auto">
+                <div className="badge bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-6 mx-auto">
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Seguridad y Cumplimiento</span>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Comunidad Global</h3>
-                <p className="text-gray-600">Miles de emprendedores y empresas nos confían para alcanzar sus objetivos de crecimiento exponencial.</p>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6 tracking-tight text-balance">
+                  Tu seguridad es nuestra prioridad absoluta
+                </h2>
+                <p className="text-lg text-slate-400 leading-relaxed">
+                  Infraestructura de nivel bancario con los mas altos estandares de encriptacion, proteccion de fondos y cumplimiento normativo.
+                </p>
               </div>
+            </AnimatedSection>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-8 hover:border-brand-orange/50 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 bg-gradient-to-br from-brand-orange to-brand-coral rounded-lg flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                  <BarChart3 className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Crecimiento Sostenible</h3>
-                <p className="text-gray-600">Operaciones de doble dígito anual con resultados comprobados en múltiples mercados latinoamericanos.</p>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-8 hover:border-brand-red/50 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 bg-gradient-to-br from-brand-red to-brand-coral rounded-lg flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                  <TrendingUp className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-3">Expansión Regional</h3>
-                <p className="text-gray-600">Presencia en mercados clave de LATAM y Norteamérica con planes de expansión agresiva.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="por-que" className="py-24">
-          <div className="max-w-7xl mx-auto px-8">
-            <div className="mb-16">
-              <div className="inline-flex items-center gap-2 bg-brand-orange/10 backdrop-blur-sm px-4 py-2 rounded-full mb-8 border border-brand-orange/30">
-                <Sparkles className="w-4 h-4 text-brand-orange" />
-                <span className="text-sm font-semibold text-brand-orange uppercase tracking-widest">Por Qué Nosotros</span>
-              </div>
-              <h2 className="text-5xl font-bold text-gray-900">
-                Ventajas Que Marcan la Diferencia
-              </h2>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-3 gap-6 mb-12">
               {[
                 {
-                  icon: Zap,
-                  title: 'Tecnología IA',
-                  description: 'Análisis de crédito en tiempo real con algoritmos de aprendizaje automático.',
-                  color: 'from-brand-red to-brand-orange'
+                  icon: Lock,
+                  title: 'Encriptacion AES-256',
+                  description: 'Todos los datos se protegen con encriptacion de grado militar, tanto en transito como en reposo.',
+                  detail: 'TLS 1.3 + AES-256-GCM'
                 },
                 {
                   icon: Shield,
-                  title: 'Transparencia Total',
-                  description: 'Procesos regulados con tasas claras. Sin costos ocultos, sin sorpresas.',
-                  color: 'from-brand-orange to-brand-coral'
+                  title: 'Cumplimiento Regulatorio',
+                  description: 'Operamos bajo los marcos normativos de cada jurisdiccion con auditorias periodicas independientes.',
+                  detail: 'SOC 2 Type II | PCI DSS'
                 },
                 {
-                  icon: Users,
-                  title: 'Equipo Experto',
-                  description: 'Profesionales con 50+ años de experiencia en finanzas e inversión.',
-                  color: 'from-brand-red to-brand-coral'
+                  icon: Server,
+                  title: 'Proteccion de Fondos',
+                  description: 'Los fondos de clientes estan segregados y respaldados por instituciones financieras reguladas.',
+                  detail: 'Segregacion de fondos | FSCS'
                 },
-                {
-                  icon: BarChart3,
-                  title: 'Resultados Comprobados',
-                  description: '85% de aprobación con seguimiento personalizado post-crédito.',
-                  color: 'from-brand-coral to-brand-orange'
-                },
-                {
-                  icon: Target,
-                  title: 'Soluciones Estratégicas',
-                  description: 'Asesoría integral enfocada en crecimiento empresarial sostenible.',
-                  color: 'from-brand-red to-brand-coral'
-                },
-                {
-                  icon: Globe,
-                  title: 'Red Global',
-                  description: 'Inversores y socios internacionales para oportunidades de expansión.',
-                  color: 'from-brand-orange to-brand-red'
-                }
               ].map((item, idx) => {
-                const IconComponent = item.icon;
+                const Icon = item.icon;
                 return (
-                  <div key={idx} className="flex gap-4 group">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${item.color} rounded-lg flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>
-                      <IconComponent className="w-6 h-6 text-white" />
+                  <AnimatedSection key={idx} delay={idx * 150}>
+                    <div className="glass-card-dark p-8 h-full hover:border-emerald-500/30 transition-all duration-300 group">
+                      <div className="w-12 h-12 bg-gradient-to-br from-emerald-500/20 to-emerald-400/10 rounded-xl flex items-center justify-center mb-5 border border-emerald-500/20 group-hover:border-emerald-500/40 transition-colors">
+                        <Icon className="w-6 h-6 text-emerald-400" />
+                      </div>
+                      <h3 className="text-lg font-bold text-white mb-3">{item.title}</h3>
+                      <p className="text-slate-400 text-sm leading-relaxed mb-4">{item.description}</p>
+                      <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-xs font-semibold text-emerald-400">{item.detail}</span>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-brand-red transition-colors">{item.title}</h3>
-                      <p className="text-gray-600 text-sm leading-relaxed">{item.description}</p>
+                  </AnimatedSection>
+                );
+              })}
+            </div>
+
+            <AnimatedSection delay={300}>
+              <div className="grid md:grid-cols-4 gap-4">
+                {[
+                  { icon: Eye, label: 'Monitoreo 24/7' },
+                  { icon: FileCheck, label: 'KYC/AML Compliance' },
+                  { icon: Award, label: 'ISO 27001' },
+                  { icon: Shield, label: 'GDPR Ready' },
+                ].map((badge, idx) => {
+                  const Icon = badge.icon;
+                  return (
+                    <div key={idx} className="flex items-center gap-3 bg-navy-800/40 border border-navy-700/30 rounded-xl px-5 py-4">
+                      <Icon className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-slate-300">{badge.label}</span>
                     </div>
+                  );
+                })}
+              </div>
+            </AnimatedSection>
+          </div>
+        </section>
+
+        {/* About Us Section */}
+        <section id="nosotros" className="section-padding bg-white">
+          <div className="container-main">
+            <div className="grid lg:grid-cols-2 gap-16 items-center">
+              <AnimatedSection>
+                <div>
+                  <div className="badge bg-navy-50 border border-navy-200 text-navy-700 mb-6">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Sobre Nosotros</span>
                   </div>
+                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-navy-900 mb-6 tracking-tight text-balance">
+                    Conoce, Invierte, Crece
+                  </h2>
+                  <p className="text-lg text-slate-600 leading-relaxed mb-8">
+                    Somos un equipo de profesionales con mas de 50 anos de experiencia combinada en finanzas, tecnologia e inversion. Nuestra mision es democratizar el acceso al credito corporativo en Latinoamerica.
+                  </p>
+
+                  <div className="space-y-6 mb-8">
+                    {[
+                      { icon: Target, title: 'Mision', text: 'Transformar el financiamiento corporativo en LATAM a traves de tecnologia e innovacion.' },
+                      { icon: Eye, title: 'Vision', text: 'Ser la plataforma de credito lider en Latinoamerica, reconocida por transparencia y excelencia.' },
+                      { icon: Award, title: 'Valores', text: 'Integridad, innovacion, transparencia y compromiso con el crecimiento de nuestros clientes.' },
+                    ].map((item, idx) => {
+                      const Icon = item.icon;
+                      return (
+                        <div key={idx} className="flex gap-4 group">
+                          <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-emerald-100 transition-colors">
+                            <Icon className="w-5 h-5 text-emerald-600" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-navy-900 mb-1">{item.title}</h3>
+                            <p className="text-sm text-slate-600 leading-relaxed">{item.text}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </AnimatedSection>
+
+              <AnimatedSection delay={200}>
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { name: 'Director General', role: 'CEO & Co-Founder', icon: Users },
+                    { name: 'Dir. Financiero', role: 'CFO', icon: BarChart3 },
+                    { name: 'Dir. Tecnologia', role: 'CTO', icon: Cpu },
+                    { name: 'Dir. Cumplimiento', role: 'Compliance Officer', icon: Shield },
+                  ].map((member, idx) => {
+                    const Icon = member.icon;
+                    return (
+                      <div key={idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 group">
+                        <div className="w-16 h-16 bg-gradient-to-br from-navy-100 to-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4 group-hover:from-navy-200 group-hover:to-emerald-100 transition-colors">
+                          <Icon className="w-8 h-8 text-navy-600" />
+                        </div>
+                        <p className="font-bold text-navy-900 text-sm mb-1">{member.name}</p>
+                        <p className="text-xs text-slate-500">{member.role}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </AnimatedSection>
+            </div>
+          </div>
+        </section>
+
+        {/* Why Us Section */}
+        <section className="section-padding bg-slate-50">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="mb-16 max-w-2xl">
+                <div className="badge bg-emerald-50 border border-emerald-200 text-emerald-700 mb-6">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Por Que Nosotros</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-navy-900 tracking-tight text-balance">
+                  Ventajas que marcan la diferencia
+                </h2>
+              </div>
+            </AnimatedSection>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[
+                { icon: Cpu, title: 'Tecnologia IA', description: 'Analisis de credito en tiempo real con algoritmos de aprendizaje automatico para decisiones mas rapidas y precisas.' },
+                { icon: Shield, title: 'Transparencia Total', description: 'Procesos regulados con tasas claras. Sin costos ocultos, sin sorpresas. Cada termino explicado.' },
+                { icon: Users, title: 'Equipo Experto', description: 'Profesionales con 50+ anos de experiencia combinada en finanzas corporativas e inversion.' },
+                { icon: BarChart3, title: 'Resultados Comprobados', description: '85% de aprobacion con seguimiento personalizado post-credito y metricas de impacto.' },
+                { icon: Target, title: 'Soluciones Estrategicas', description: 'Asesoria integral enfocada en crecimiento empresarial sostenible a largo plazo.' },
+                { icon: Globe, title: 'Red Global', description: 'Inversores y socios internacionales para oportunidades de expansion en multiples mercados.' },
+              ].map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <AnimatedSection key={idx} delay={idx * 80}>
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 group h-full">
+                      <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+                        <Icon className="w-5 h-5 text-emerald-600" />
+                      </div>
+                      <h3 className="font-bold text-navy-900 mb-2 group-hover:text-emerald-700 transition-colors">{item.title}</h3>
+                      <p className="text-sm text-slate-600 leading-relaxed">{item.description}</p>
+                    </div>
+                  </AnimatedSection>
                 );
               })}
             </div>
           </div>
         </section>
 
-        <section className="py-20 border-y border-gray-200 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-8">
-            <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 bg-brand-red/10 backdrop-blur-sm px-4 py-2 rounded-full mb-8 border border-brand-red/30">
-                <MessageCircle className="w-4 h-4 text-brand-red" />
-                <span className="text-sm font-semibold text-brand-red uppercase tracking-widest">Testimonios</span>
+        {/* Resources Section */}
+        <section id="recursos" className="section-padding bg-white">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="flex items-end justify-between mb-12">
+                <div>
+                  <div className="badge bg-navy-50 border border-navy-200 text-navy-700 mb-6">
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Centro de Recursos</span>
+                  </div>
+                  <h2 className="text-3xl md:text-4xl font-bold text-navy-900 tracking-tight">
+                    Educacion financiera para tu crecimiento
+                  </h2>
+                </div>
+                <a href="#" className="hidden md:inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
+                  Ver todos los articulos
+                  <ArrowUpRight className="w-4 h-4" />
+                </a>
               </div>
-              <h2 className="text-4xl font-bold text-gray-900 mb-6">Lo que Dicen Nuestros Clientes</h2>
-            </div>
+            </AnimatedSection>
 
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="grid md:grid-cols-3 gap-6">
               {[
                 {
-                  quote: 'Simbiosis nos proporcionó el financiamiento estratégico que necesitábamos para escalar en tres países.',
-                  author: 'Director Ejecutivo',
-                  company: 'Empresa de Tecnología'
+                  category: 'Finanzas Corporativas',
+                  title: 'Como estructurar tu credito corporativo de forma optima',
+                  readTime: '8 min',
+                  date: '15 Abr 2026'
                 },
                 {
-                  quote: 'El proceso fue ágil, transparente y el equipo nos acompañó en cada paso. Recomendamos sin dudarlo.',
-                  author: 'Fundador y CEO',
-                  company: 'StartUp de Logística'
+                  category: 'Regulacion',
+                  title: 'Nuevas normativas Fintech en Colombia: lo que debes saber',
+                  readTime: '5 min',
+                  date: '8 Abr 2026'
                 },
                 {
-                  quote: 'La asesoría de Simbiosis fue clave para optimizar nuestra estructura de financiamiento.',
-                  author: 'Gerente Financiero',
-                  company: 'Empresa Inmobiliaria'
-                }
-              ].map((testimonial, idx) => (
-                <div key={idx} className="bg-white p-8 rounded-xl border border-gray-200 hover:border-brand-orange/50 hover:shadow-lg transition-all group">
-                  <p className="text-gray-600 text-sm leading-relaxed mb-6 italic group-hover:text-gray-700 transition-colors">"{testimonial.quote}"</p>
-                  <div className="border-t border-gray-200 pt-6">
-                    <p className="font-semibold text-gray-900 text-sm">{testimonial.author}</p>
-                    <p className="text-gray-500 text-xs mt-1">{testimonial.company}</p>
-                  </div>
-                </div>
+                  category: 'Crecimiento',
+                  title: '5 estrategias para escalar tu empresa con financiamiento inteligente',
+                  readTime: '6 min',
+                  date: '1 Abr 2026'
+                },
+              ].map((article, idx) => (
+                <AnimatedSection key={idx} delay={idx * 100}>
+                  <article className="group cursor-pointer h-full">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 h-full flex flex-col">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md">{article.category}</span>
+                        <span className="text-xs text-slate-400">{article.readTime} lectura</span>
+                      </div>
+                      <h3 className="font-bold text-navy-900 mb-3 group-hover:text-emerald-700 transition-colors leading-snug flex-1">
+                        {article.title}
+                      </h3>
+                      <p className="text-xs text-slate-400">{article.date}</p>
+                    </div>
+                  </article>
+                </AnimatedSection>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="py-20 relative">
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute top-1/2 right-0 w-96 h-96 bg-brand-red/10 rounded-full blur-3xl"></div>
-            <div className="absolute top-1/4 left-1/4 w-72 h-72 bg-brand-orange/10 rounded-full blur-3xl"></div>
-          </div>
-
-          <div className="max-w-7xl mx-auto px-8 relative z-10">
-            <div className="bg-gradient-to-br from-brand-red to-brand-orange rounded-2xl p-16 text-center text-white border border-brand-red/30 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-brand-coral/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-              <div className="relative z-10">
-                <h2 className="text-4xl font-bold mb-4">Comienza Tu Transformación</h2>
-                <p className="text-lg text-white/90 mb-8 max-w-2xl mx-auto">
-                  Solicita tu crédito hoy y accede a soluciones financieras diseñadas para empresas como la tuya.
-                </p>
-                <div className="flex gap-4 justify-center">
-                  <button
-                    onClick={onStartApplication}
-                    className="bg-white text-brand-red hover:bg-gray-100 px-8 py-3 rounded-lg text-sm font-semibold transition-all hover:shadow-lg"
-                  >
-                    Solicitar Crédito
-                  </button>
-                  <button
-                    onClick={handleWhatsAppClick}
-                    className="border border-white text-white hover:bg-white/20 px-8 py-3 rounded-lg text-sm font-semibold transition-all"
-                  >
-                    Contactar
-                  </button>
+        {/* Testimonials */}
+        <section className="section-padding bg-slate-50 border-y border-slate-200/60">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="text-center mb-16 max-w-2xl mx-auto">
+                <div className="badge bg-emerald-50 border border-emerald-200 text-emerald-700 mb-6 mx-auto">
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>Testimonios</span>
                 </div>
+                <h2 className="text-3xl md:text-4xl font-bold text-navy-900 tracking-tight">
+                  Lo que dicen nuestros clientes
+                </h2>
               </div>
+            </AnimatedSection>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {[
+                {
+                  quote: 'Simbiosis nos proporciono el financiamiento estrategico que necesitabamos para escalar en tres paises. Su tecnologia agilizo todo el proceso.',
+                  author: 'Director Ejecutivo',
+                  company: 'Empresa de Tecnologia'
+                },
+                {
+                  quote: 'El proceso fue agil, transparente y el equipo nos acompano en cada paso. La infraestructura de seguridad nos dio total confianza.',
+                  author: 'Fundador y CEO',
+                  company: 'StartUp de Logistica'
+                },
+                {
+                  quote: 'La asesoria de Simbiosis fue clave para optimizar nuestra estructura de financiamiento. Resultados comprobados desde el primer mes.',
+                  author: 'Gerente Financiero',
+                  company: 'Empresa Inmobiliaria'
+                }
+              ].map((testimonial, idx) => (
+                <AnimatedSection key={idx} delay={idx * 100}>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-8 hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 h-full flex flex-col">
+                    <div className="flex gap-1 mb-4">
+                      {[...Array(5)].map((_, i) => (
+                        <svg key={i} className="w-4 h-4 text-emerald-500 fill-current" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                        </svg>
+                      ))}
+                    </div>
+                    <p className="text-slate-600 text-sm leading-relaxed mb-6 italic flex-1">"{testimonial.quote}"</p>
+                    <div className="border-t border-slate-100 pt-5">
+                      <p className="font-bold text-navy-900 text-sm">{testimonial.author}</p>
+                      <p className="text-slate-500 text-xs mt-1">{testimonial.company}</p>
+                    </div>
+                  </div>
+                </AnimatedSection>
+              ))}
             </div>
           </div>
         </section>
 
-        <footer className="bg-gray-900 text-white py-16 border-t border-gray-800">
-          <div className="max-w-7xl mx-auto px-8">
+        {/* CTA Section */}
+        <section className="py-20 relative overflow-hidden">
+          <div className="absolute inset-0">
+            <div className="absolute top-1/2 right-0 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] -translate-y-1/2" />
+            <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-navy-500/10 rounded-full blur-[100px]" />
+          </div>
+
+          <div className="container-main relative z-10">
+            <AnimatedSection>
+              <div className="bg-gradient-to-br from-navy-900 via-navy-800 to-navy-900 rounded-3xl p-10 md:p-16 text-center relative overflow-hidden border border-navy-700/40">
+                <div className="absolute inset-0 opacity-[0.03]" style={{
+                  backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
+                  backgroundSize: '32px 32px'
+                }} />
+
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px]" />
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-navy-400/10 rounded-full blur-[60px]" />
+
+                <div className="relative z-10">
+                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4 tracking-tight text-balance">
+                    Comienza tu transformacion financiera
+                  </h2>
+                  <p className="text-lg text-slate-300 mb-10 max-w-2xl mx-auto">
+                    Solicita tu credito hoy y accede a soluciones financieras disenadas para empresas como la tuya. Proceso 100% digital.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button
+                      onClick={onStartApplication}
+                      className="btn-primary !px-10 !py-4 !text-base inline-flex items-center justify-center gap-2"
+                    >
+                      Solicitar Credito
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={handleWhatsAppClick}
+                      className="border-2 border-slate-500/40 text-white hover:bg-white/5 hover:border-slate-400/60 px-10 py-4 rounded-xl text-base font-semibold transition-all duration-300 inline-flex items-center justify-center gap-2"
+                    >
+                      Hablar con un Asesor
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
+        </section>
+
+        {/* Contact Section */}
+        <section className="section-padding bg-white border-t border-slate-200/60">
+          <div className="container-main">
+            <AnimatedSection>
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Mail className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-navy-900 text-sm mb-1">Email</h3>
+                    <p className="text-sm text-slate-600">info@simbiosis.com</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-navy-900 text-sm mb-1">Telefono</h3>
+                    <p className="text-sm text-slate-600">+57 (1) 234 5678</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <MapPin className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-navy-900 text-sm mb-1">Oficina</h3>
+                    <p className="text-sm text-slate-600">Bogota, Colombia</p>
+                  </div>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="bg-navy-950 text-white py-16 border-t border-navy-800">
+          <div className="container-main">
             <div className="grid md:grid-cols-4 gap-12 mb-12">
               <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 bg-gradient-to-br from-brand-red to-brand-orange rounded-lg flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-white" />
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-9 h-9 bg-gradient-to-br from-navy-600 to-emerald-500 rounded-xl flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-white" />
                   </div>
-                  <h3 className="font-semibold text-white">Simbiosis</h3>
+                  <span className="font-bold text-lg text-white">Simbiosis</span>
                 </div>
-                <p className="text-gray-400 text-sm">Conoce, Invierte, Crece.</p>
-                <p className="text-gray-500 text-xs mt-3">Transformando el financiamiento corporativo en LATAM.</p>
+                <p className="text-slate-400 text-sm leading-relaxed mb-3">Conoce, Invierte, Crece.</p>
+                <p className="text-slate-500 text-xs leading-relaxed">Transformando el financiamiento corporativo en LATAM con tecnologia e innovacion.</p>
               </div>
               <div>
-                <h4 className="font-semibold text-white mb-4 text-sm">Soluciones</h4>
-                <ul className="space-y-2 text-gray-400 text-sm">
-                  <li><a href="#servicios" className="hover:text-brand-orange transition-colors">Créditos</a></li>
-                  <li><a href="#" className="hover:text-brand-orange transition-colors">Inversión</a></li>
-                  <li><a href="#" className="hover:text-brand-orange transition-colors">Asesoría</a></li>
+                <h4 className="font-bold text-white mb-5 text-sm">Soluciones</h4>
+                <ul className="space-y-3 text-slate-400 text-sm">
+                  <li><a href="#soluciones" className="hover:text-emerald-400 transition-colors">Credito Emprendedores</a></li>
+                  <li><a href="#soluciones" className="hover:text-emerald-400 transition-colors">Credito Inmobiliario</a></li>
+                  <li><a href="#soluciones" className="hover:text-emerald-400 transition-colors">Libre Inversion</a></li>
+                  <li><a href="#soluciones" className="hover:text-emerald-400 transition-colors">Microcredito</a></li>
                 </ul>
               </div>
               <div>
-                <h4 className="font-semibold text-white mb-4 text-sm">Empresa</h4>
-                <ul className="space-y-2 text-gray-400 text-sm">
-                  <li><a href="#impacto" className="hover:text-brand-orange transition-colors">Impacto</a></li>
-                  <li><a href="#por-que" className="hover:text-brand-orange transition-colors">Sobre Nosotros</a></li>
-                  <li><a href="#" className="hover:text-brand-orange transition-colors">Equipo</a></li>
+                <h4 className="font-bold text-white mb-5 text-sm">Empresa</h4>
+                <ul className="space-y-3 text-slate-400 text-sm">
+                  <li><a href="#nosotros" className="hover:text-emerald-400 transition-colors">Sobre Nosotros</a></li>
+                  <li><a href="#seguridad" className="hover:text-emerald-400 transition-colors">Seguridad</a></li>
+                  <li><a href="#recursos" className="hover:text-emerald-400 transition-colors">Recursos</a></li>
+                  <li><a href="#" className="hover:text-emerald-400 transition-colors">Carreras</a></li>
                 </ul>
               </div>
               <div>
-                <h4 className="font-semibold text-white mb-4 text-sm">Contacto</h4>
-                <p className="text-gray-400 text-sm mb-2">Email: info@simbiosis.com</p>
-                <p className="text-gray-400 text-sm">Colombia • LATAM</p>
+                <h4 className="font-bold text-white mb-5 text-sm">Legal</h4>
+                <ul className="space-y-3 text-slate-400 text-sm">
+                  <li><a href="#" className="hover:text-emerald-400 transition-colors">Terminos de Servicio</a></li>
+                  <li><a href="#" className="hover:text-emerald-400 transition-colors">Politica de Privacidad</a></li>
+                  <li><a href="#" className="hover:text-emerald-400 transition-colors">Politica de Cookies</a></li>
+                  <li><a href="#" className="hover:text-emerald-400 transition-colors">Disclosures</a></li>
+                </ul>
               </div>
             </div>
 
-            <div className="border-t border-gray-800 pt-8">
-              <p className="text-gray-500 text-xs text-center">
-                © 2024 Simbiosis SAS. Todos los derechos reservados. Financiamiento inteligente para empresas que crecen.
+            <div className="border-t border-navy-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+              <p className="text-slate-500 text-xs">
+                &copy; 2026 Simbiosis SAS. Todos los derechos reservados. Financiamiento inteligente para empresas que crecen.
               </p>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-slate-500">Regulado por la Superintendencia Financiera de Colombia</span>
+              </div>
             </div>
           </div>
         </footer>

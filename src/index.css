@@ -1,3 +1,98 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    font-variation-settings: 'opsz' 32;
+  }
+
+  ::selection {
+    background-color: #00C9A7;
+    color: #0A1628;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-2xl;
+  }
+
+  .glass-card-dark {
+    @apply bg-navy-800/60 backdrop-blur-xl border border-navy-700/40 rounded-2xl;
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-emerald-500;
+  }
+
+  .gradient-text-navy {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-navy-700 to-navy-500;
+  }
+
+  .btn-primary {
+    @apply bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white px-8 py-3 rounded-xl text-sm font-semibold transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/25 active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply border-2 border-navy-700 text-navy-700 hover:bg-navy-50 px-8 py-3 rounded-xl text-sm font-semibold transition-all duration-300;
+  }
+
+  .btn-ghost {
+    @apply text-slate-600 hover:text-navy-700 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200;
+  }
+
+  .section-padding {
+    @apply py-20 md:py-28;
+  }
+
+  .container-main {
+    @apply max-w-7xl mx-auto px-6 lg:px-8;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-widest;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-navy-900 placeholder:text-slate-400 transition-all duration-200 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20;
+  }
+
+  .input-field-error {
+    @apply border-red-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/20;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .animate-delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animate-delay-200 {
+    animation-delay: 200ms;
+  }
+
+  .animate-delay-300 {
+    animation-delay: 300ms;
+  }
+
+  .animate-delay-400 {
+    animation-delay: 400ms;
+  }
+
+  .animate-delay-500 {
+    animation-delay: 500ms;
+  }
+}
