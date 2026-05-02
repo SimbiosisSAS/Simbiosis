@@ -57,7 +57,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
   }, []);
 
   const handleWhatsAppClick = () => {
-    window.open('https://wa.me/57', '_blank');
+    window.open('https://wa.me/573197987310', '_blank');
   };
 
   const navLinks = [
@@ -863,7 +863,6 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                 &copy; 2026 Simbiosis SAS. Todos los derechos reservados. Financiamiento inteligente para empresas que crecen.
               </p>
               <div className="flex items-center gap-4">
-                <span className="text-xs text-slate-500">Regulado por la Superintendencia Financiera de Colombia</span>
               </div>
             </div>
           </div>
