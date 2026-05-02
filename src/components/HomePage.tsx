@@ -789,7 +789,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="font-bold text-navy-900 text-sm mb-1">Email</h3>
-                    <p className="text-sm text-slate-600">info@simbiosis.com</p>
+                    <p className="text-sm text-slate-600">a@simbiosis.la</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
@@ -798,7 +798,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="font-bold text-navy-900 text-sm mb-1">Telefono</h3>
-                    <p className="text-sm text-slate-600">+57 (1) 234 5678</p>
+                    <p className="text-sm text-slate-600">+57 319 7987310</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-4">
@@ -807,7 +807,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                   </div>
                   <div>
                     <h3 className="font-bold text-navy-900 text-sm mb-1">Oficina</h3>
-                    <p className="text-sm text-slate-600">Bogota, Colombia</p>
+                    <p className="text-sm text-slate-600">Guatavita, Colombia</p>
                   </div>
                 </div>
               </div>
