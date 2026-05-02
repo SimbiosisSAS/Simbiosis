@@ -3,8 +3,9 @@ import {
   ArrowRight, TrendingUp, Building2, Target, Zap, Shield, BarChart3,
   Users, Globe, MessageCircle, ChevronRight, CheckCircle, Sparkles,
   Rocket, Lock, FileCheck, Server, Eye, Award, BookOpen, Phone,
-  Mail, MapPin, ChevronDown, Play, ArrowUpRight, Cpu, Landmark
+  Mail, MapPin, ChevronDown, Play, ArrowUpRight, Cpu, Landmark, Calculator
 } from 'lucide-react';
+import CreditDemoModal from './CreditDemoModal';
 
 interface HomePageProps {
   onStartApplication: () => void;
@@ -47,6 +48,7 @@ function AnimatedSection({ children, className = '', delay = 0 }: { children: Re
 export default function HomePage({ onStartApplication }: HomePageProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -196,11 +198,11 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                     <ArrowRight className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={handleWhatsAppClick}
+                    onClick={() => setDemoModalOpen(true)}
                     className="border-2 border-slate-500/40 text-white hover:bg-white/5 hover:border-slate-400/60 px-8 py-4 rounded-xl text-base font-semibold transition-all duration-300 inline-flex items-center justify-center gap-2"
                   >
-                    <Play className="w-5 h-5" />
-                    Ver Demo
+                    <Calculator className="w-5 h-5" />
+                    Simular Credito
                   </button>
                 </div>
 
@@ -757,6 +759,13 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                       <ArrowRight className="w-5 h-5" />
                     </button>
                     <button
+                      onClick={() => setDemoModalOpen(true)}
+                      className="border-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-400/60 px-10 py-4 rounded-xl text-base font-semibold transition-all duration-300 inline-flex items-center justify-center gap-2"
+                    >
+                      <Calculator className="w-5 h-5" />
+                      Simular Credito
+                    </button>
+                    <button
                       onClick={handleWhatsAppClick}
                       className="border-2 border-slate-500/40 text-white hover:bg-white/5 hover:border-slate-400/60 px-10 py-4 rounded-xl text-base font-semibold transition-all duration-300 inline-flex items-center justify-center gap-2"
                     >
@@ -860,6 +869,12 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
           </div>
         </footer>
       </main>
+
+      <CreditDemoModal
+        isOpen={demoModalOpen}
+        onClose={() => setDemoModalOpen(false)}
+        onApply={onStartApplication}
+      />
     </div>
   );
 }
