@@ -134,6 +134,7 @@ function App() {
 {currentStep === 'admin-login' && <AdminLogin onLoginSuccess={() => setCurrentStep('admin')} />}
       {currentStep === 'admin' && <AdminDashboard />}
     </div>
+    // Core Bancario actualizado
   );
 }
 
