@@ -1,3 +1,4 @@
+import AdminLogin from './components/AdminLogin';
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { uploadImage } from './lib/storage';
@@ -9,7 +10,7 @@ import DocumentUpload from './components/DocumentUpload';
 import SuccessPage from './components/SuccessPage';
 import AdminDashboard from './components/AdminDashboard';
 
-type AppStep = 'home' | 'credit-type' | 'form' | 'documents' | 'success' | 'admin';
+type AppStep = 'home' | 'credit-type' | 'form' | 'documents' | 'success' | 'admin' | 'admin-login';
 
 function App() {
   const [currentStep, setCurrentStep] = useState<AppStep>('home');
@@ -19,11 +20,12 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('admin') === 'true') {
-      setCurrentStep('admin');
-    }
-  }, []);
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('admin') === 'true') {
+    // AHORA MANDAMOS AL LOGIN, NO AL PANEL DIRECTO
+    setCurrentStep('admin-login'); 
+  }
+}, []);
 
   const handleStartApplication = () => {
     setCurrentStep('credit-type');
@@ -129,6 +131,7 @@ function App() {
         />
       )}
       {currentStep === 'success' && <SuccessPage onBackHome={handleBackHome} />}
+{currentStep === 'admin-login' && <AdminLogin onLoginSuccess={() => setCurrentStep('admin')} />}
       {currentStep === 'admin' && <AdminDashboard />}
     </div>
   );
