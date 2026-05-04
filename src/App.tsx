@@ -51,9 +51,9 @@ function App() {
     setError(null);
 
     try {
-      const idFrontUrl = await uploadImage(images.idFront, 'credit-documents', 'id-front');
-      const idBackUrl = await uploadImage(images.idBack, 'credit-documents', 'id-back');
-      const selfieUrl = await uploadImage(images.selfie, 'credit-documents', 'selfie');
+      const idFrontUrl = await uploadImage(images.idFront, 'archivos', 'id-front');
+      const idBackUrl = await uploadImage(images.idBack, 'archivos', 'id-back');
+      const selfieUrl = await uploadImage(images.selfie, 'archivos', 'selfie');
 
       const { error: dbError } = await supabase
         .from('credit_applications')
