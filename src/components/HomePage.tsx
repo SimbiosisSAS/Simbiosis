@@ -854,6 +854,14 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                   <li><a href="#" className="hover:text-emerald-400 transition-colors">Politica de Privacidad</a></li>
                   <li><a href="#" className="hover:text-emerald-400 transition-colors">Politica de Cookies</a></li>
                   <li><a href="#" className="hover:text-emerald-400 transition-colors">Disclosures</a></li>
+<li className="mt-4 border-t border-slate-700/50 pt-4">
+  <a 
+    href="?admin=true" 
+    className="hover:text-emerald-400 transition-colors flex items-center gap-2"
+  >
+    Acceso Admin
+  </a>
+</li>
                 </ul>
               </div>
             </div>
