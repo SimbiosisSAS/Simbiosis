@@ -220,7 +220,7 @@ export default function LoanOriginationEngine() {
           loan_number: params.loanNumber || null,
           client_name: params.clientName,
           client_id_number: params.clientId,       // ALINEADO CON BD
-          principal_amount: params.principalAmount, // ALINEADO CON BD
+          loan_amount: params.principalAmount, // ALINEADO CON BD
           origination_costs: params.originationCosts,
           disbursement_date: params.disbursementDate,
           nominal_rate_mv: params.nominalRateMV,
