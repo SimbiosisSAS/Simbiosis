@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador';
@@ -32,7 +32,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       fetchApplications();
     } else if (activeTab === 'cartera') {
       fetchActiveLoans();
-      setSelectedLoan(null); // Limpiar selección al cambiar de pestaña
+      setSelectedLoan(null);
     }
   }, [filterStatus, activeTab]);
 
@@ -78,7 +78,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     setSelectedInstallment(installment);
     setPaymentData({
       actualDate: new Date().toISOString().split('T')[0],
-      actualAmount: installment.expected_amount, // Sugerimos el monto exacto
+      actualAmount: installment.expected_amount,
       lateFee: 0
     });
     setShowPaymentModal(true);
@@ -120,15 +120,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
-  // Helpers
   const formatCurrency = (val: number) => '$ ' + Number(val).toLocaleString('es-CO');
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PAID': return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Pagado</span>;
-      case 'LATE': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">Pagado (Mora)</span>;
-      default: return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Pendiente</span>;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
@@ -217,7 +209,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
-                    <p className="text-slate-400">ID: {selectedLoan.client_id_number} | Desembolso: {selectedLoan.disbursement_date}</p>
+                    <p className="text-slate-400">ID: {selectedLoan.client_id_number} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
                   </div>
                   <button onClick={() => setSelectedLoan(null)} className="text-slate-500 hover:text-white">Cerrar vista</button>
                 </div>
@@ -259,7 +251,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
                             <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
                             <td className="p-3 font-medium text-emerald-400 text-right">{formatCurrency(inst.expected_amount)}</td>
-                            <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
+                            <td className="p-3 text-center">
+                              {inst.status === 'PAID' ? <span className="text-green-500">Pagado</span> : 
+                               inst.status === 'LATE' ? <span className="text-red-500">Mora</span> : 
+                               <span className="text-amber-500">Pendiente</span>}
+                            </td>
                             <td className="p-3 text-center">
                               {inst.status === 'PENDING' ? (
                                 <button 
@@ -269,7 +265,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                                   Cobrar
                                 </button>
                               ) : (
-                                <span className="text-xs text-slate-500">Pagado el {inst.actual_payment_date}</span>
+                                <span className="text-xs text-slate-500">{inst.actual_payment_date}</span>
                               )}
                             </td>
                           </tr>
@@ -283,12 +279,62 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA 3: SOLICITUDES WEB (Mantenida exactamente igual) */}
+        {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
-           <div className="text-center p-12 bg-slate-800/40 rounded-2xl border border-slate-700/50">
-              <h2 className="text-xl font-bold text-white mb-4">Solicitudes Entrantes</h2>
-              <p className="text-slate-400">Aquí mantuvimos tu código original de solicitudes. Cambia de pestaña para ver el Core.</p>
-           </div>
+          <>
+            <div className="flex gap-2 mb-8 flex-wrap">
+              {[{ status: 'ALL', label: 'Todas', color: 'bg-slate-700' }, { status: 'PENDING', label: 'Pendientes', color: 'bg-amber-600' }, { status: 'APPROVED', label: 'Aprobadas', color: 'bg-emerald-600' }, { status: 'REJECTED', label: 'Rechazadas', color: 'bg-red-600' }].map((btn) => (
+                <button
+                  key={btn.status}
+                  onClick={() => setFilterStatus(btn.status)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterStatus === btn.status ? `${btn.color} text-white shadow-sm` : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50'}`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-3">
+                {applications.map((app) => (
+                  <div key={app.id} onClick={() => setSelectedApp(app)} className="bg-slate-800/40 rounded-xl p-5 border border-slate-700/50 cursor-pointer hover:bg-slate-800/60">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3>
+                        <p className="text-xs text-slate-500">{app.email}</p>
+                        <p className="text-lg font-bold text-emerald-400 mt-2">${Number(app.credit_amount).toLocaleString('es-CO')}</p>
+                      </div>
+                      <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                {selectedApp ? (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
+                    <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
+                    <div className="space-y-4 mb-6">
+                      <p className="text-slate-300"><strong>Nombre:</strong> {selectedApp.first_name} {selectedApp.last_name}</p>
+                      <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
+                      <p className="text-slate-300"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
+                    </div>
+                    {selectedApp.id_front_image && <img src={selectedApp.id_front_image} className="w-full rounded-xl mb-4" />}
+                    {selectedApp.selfie_image && <img src={selectedApp.selfie_image} className="w-full rounded-xl mb-6" />}
+                    
+                    {selectedApp.status === 'PENDING' && (
+                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
+                        <button onClick={() => updateStatus(selectedApp.id, 'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button>
+                        <button onClick={() => updateStatus(selectedApp.id, 'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -303,49 +349,23 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Fecha Real de Pago</label>
-                <input 
-                  type="date" 
-                  value={paymentData.actualDate}
-                  onChange={(e) => setPaymentData({...paymentData, actualDate: e.target.value})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white"
-                />
+                <input type="date" value={paymentData.actualDate} onChange={(e) => setPaymentData({...paymentData, actualDate: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white" />
               </div>
               
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Monto Pagado (Capital + Interés)</label>
-                <input 
-                  type="number" 
-                  value={paymentData.actualAmount}
-                  onChange={(e) => setPaymentData({...paymentData, actualAmount: Number(e.target.value)})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono"
-                />
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Monto Pagado</label>
+                <input type="number" value={paymentData.actualAmount} onChange={(e) => setPaymentData({...paymentData, actualAmount: Number(e.target.value)})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-amber-500 uppercase mb-1">Cobro por Mora (Si aplica)</label>
-                <input 
-                  type="number" 
-                  value={paymentData.lateFee}
-                  onChange={(e) => setPaymentData({...paymentData, lateFee: Number(e.target.value)})}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono"
-                  placeholder="0"
-                />
+                <label className="block text-xs font-semibold text-amber-500 uppercase mb-1">Cobro por Mora (Opcional)</label>
+                <input type="number" value={paymentData.lateFee} onChange={(e) => setPaymentData({...paymentData, lateFee: Number(e.target.value)})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono" />
               </div>
             </div>
 
             <div className="flex gap-3 mt-8">
-              <button 
-                onClick={() => setShowPaymentModal(false)}
-                className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleRegisterPayment}
-                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold"
-              >
-                Confirmar Pago
-              </button>
+              <button onClick={() => setShowPaymentModal(false)} className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800">Cancelar</button>
+              <button onClick={handleRegisterPayment} className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold">Confirmar Pago</button>
             </div>
           </div>
         </div>
