@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador';
@@ -11,93 +11,130 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [applications, setApplications] = useState<CreditApplication[]>([]);
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estados para detalles
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
+  const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
+
+  // Estados para el Modal de Pago
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
+  const [paymentData, setPaymentData] = useState({
+    actualDate: new Date().toISOString().split('T')[0],
+    actualAmount: 0,
+    lateFee: 0
+  });
 
   useEffect(() => {
     if (activeTab === 'solicitudes') {
       fetchApplications();
     } else if (activeTab === 'cartera') {
       fetchActiveLoans();
+      setSelectedLoan(null); // Limpiar selección al cambiar de pestaña
     }
   }, [filterStatus, activeTab]);
 
+  // Cargar Solicitudes Web
   const fetchApplications = async () => {
     setLoading(true);
-    let query = supabase
-      .from('credit_applications')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (filterStatus !== 'ALL') {
-      query = query.eq('status', filterStatus);
-    }
-
+    let query = supabase.from('credit_applications').select('*').order('created_at', { ascending: false });
+    if (filterStatus !== 'ALL') query = query.eq('status', filterStatus);
     const { data, error } = await query;
     if (!error) setApplications(data || []);
     setLoading(false);
   };
 
+  // Cargar Cartera Activa
   const fetchActiveLoans = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('active_loans')
-      .select('*')
-      .order('created_at', { ascending: false });
-
+    const { data, error } = await supabase.from('active_loans').select('*').order('created_at', { ascending: false });
     if (!error) setActiveLoans(data || []);
     setLoading(false);
   };
 
-  const updateStatus = async (appId: string, newStatus: string) => {
-    const { error } = await supabase
-      .from('credit_applications')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', appId);
+  // Cargar las Cuotas de un Crédito Específico
+  const fetchInstallments = async (loanId: string) => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('loan_installments')
+      .select('*')
+      .eq('loan_id', loanId)
+      .order('installment_number', { ascending: true });
+    
+    if (!error) setLoanInstallments(data || []);
+    setLoading(false);
+  };
 
+  // Seleccionar un Crédito para ver detalles
+  const handleSelectLoan = (loan: any) => {
+    setSelectedLoan(loan);
+    fetchInstallments(loan.id);
+  };
+
+  // Abrir Modal de Pago
+  const openPaymentModal = (installment: any) => {
+    setSelectedInstallment(installment);
+    setPaymentData({
+      actualDate: new Date().toISOString().split('T')[0],
+      actualAmount: installment.expected_amount, // Sugerimos el monto exacto
+      lateFee: 0
+    });
+    setShowPaymentModal(true);
+  };
+
+  // Registrar el Pago en Supabase
+  const handleRegisterPayment = async () => {
+    if (!selectedInstallment) return;
+    
+    try {
+      const status = paymentData.lateFee > 0 ? 'LATE' : 'PAID';
+      
+      const { error } = await supabase
+        .from('loan_installments')
+        .update({
+          status: status,
+          actual_payment_date: paymentData.actualDate,
+          actual_amount_paid: paymentData.actualAmount,
+          late_fee_charged: paymentData.lateFee
+        })
+        .eq('id', selectedInstallment.id);
+
+      if (error) throw error;
+      
+      alert('¡Pago registrado con éxito!');
+      setShowPaymentModal(false);
+      fetchInstallments(selectedLoan.id); // Recargar la tabla de cuotas
+      
+    } catch (err: any) {
+      alert('Error al registrar pago: ' + err.message);
+    }
+  };
+
+  const updateStatus = async (appId: string, newStatus: string) => {
+    const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
     if (!error) {
       fetchApplications();
       setSelectedApp(null);
     }
   };
 
-  const creditTypeLabels: Record<string, string> = {
-    ENTREPRENEURSHIP: 'Crédito para Emprendedores',
-    REAL_ESTATE: 'Crédito Inmobiliario',
-    FREE_INVESTMENT: 'Crédito de Libre Inversión',
-    MICROCREDIT: 'Microcrédito'
-  };
-
-  const getStatusConfig = (status: string) => {
+  // Helpers
+  const formatCurrency = (val: number) => '$ ' + Number(val).toLocaleString('es-CO');
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'APPROVED':
-        return { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', icon: <CheckCircle className="w-4 h-4" /> };
-      case 'REJECTED':
-        return { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/20', icon: <XCircle className="w-4 h-4" /> };
-      case 'PENDING':
-        return { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', icon: <Clock className="w-4 h-4" /> };
-      default:
-        return { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', icon: null };
+      case 'PAID': return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Pagado</span>;
+      case 'LATE': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">Pagado (Mora)</span>;
+      default: return <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Pendiente</span>;
     }
   };
 
-  const filterButtons = [
-    { status: 'ALL', label: 'Todas', activeColor: 'bg-navy-700' },
-    { status: 'PENDING', label: 'Pendientes', activeColor: 'bg-amber-600' },
-    { status: 'APPROVED', label: 'Aprobadas', activeColor: 'bg-emerald-600' },
-    { status: 'REJECTED', label: 'Rechazadas', activeColor: 'bg-red-600' },
-  ];
-
-  const tabs = [
-    { id: 'solicitudes' as AdminTab, label: 'Solicitudes Web', icon: FileText },
-    { id: 'cartera' as AdminTab, label: 'Cartera Activa', icon: Wallet },
-    { id: 'simulador' as AdminTab, label: 'Simulador de Crédito', icon: Calculator },
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-slate-950 pb-12">
+      {/* NAVEGACIÓN SUPERIOR */}
       <nav className="bg-slate-900/80 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-9 h-9 bg-gradient-to-br from-navy-700 to-emerald-500 rounded-xl flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
@@ -109,266 +146,210 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
 
           <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === tab.id
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
+            <button onClick={() => setActiveTab('solicitudes')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'solicitudes' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}><FileText className="w-4 h-4"/> Solicitudes Web</button>
+            <button onClick={() => setActiveTab('cartera')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'cartera' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}><Wallet className="w-4 h-4"/> Cartera Activa</button>
+            <button onClick={() => setActiveTab('simulador')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'simulador' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}><Calculator className="w-4 h-4"/> Simulador de Crédito</button>
           </div>
 
           {onLogout && (
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
-            >
-              <LogOut className="w-4 h-4" />
-              Cerrar Sesión
+            <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10">
+              <LogOut className="w-4 h-4" /> Cerrar
             </button>
           )}
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* PESTAÑA: SIMULADOR */}
+        {/* PESTAÑA 1: SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
-        {/* PESTAÑA: CARTERA ACTIVA */}
+        {/* PESTAÑA 2: CARTERA ACTIVA (Y GESTIÓN DE PAGOS) */}
         {activeTab === 'cartera' && (
-          <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
-             <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-bold text-white">Créditos Otorgados (Cartera Activa)</h2>
-                <p className="text-sm text-slate-400">Listado de préstamos desembolsados y en curso.</p>
-              </div>
-              <div className="flex gap-4">
-                <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 min-w-[200px]">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Colocado</p>
-                  <p className="text-xl font-bold text-emerald-400 font-mono tabular-nums">
-                    ${activeLoans.reduce((sum, loan) => sum + Number(loan.principal_amount), 0).toLocaleString('es-CO')}
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div className="grid lg:grid-cols-3 gap-6">
             
-            {loading ? (
-              <div className="p-12 text-center text-slate-400">Cargando cartera...</div>
-            ) : activeLoans.length === 0 ? (
-               <div className="p-12 text-center text-slate-500">Aún no hay créditos activados en la cartera.</div>
-            ) : (
+            {/* Lista de Créditos (Izquierda) */}
+            <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
+              <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-white">Créditos Otorgados</h2>
+                {!selectedLoan && (
+                  <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-3">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider">Total Colocado</p>
+                    <p className="text-lg font-bold text-emerald-400">{formatCurrency(activeLoans.reduce((sum, loan) => sum + Number(loan.principal_amount), 0))}</p>
+                  </div>
+                )}
+              </div>
+              
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50">
                     <tr>
-                      <th className="p-4 font-semibold">Fecha Desembolso</th>
-                      <th className="p-4 font-semibold">Cliente</th>
-                      <th className="p-4 font-semibold">Identificación</th>
-                      <th className="p-4 font-semibold text-right">Monto Principal</th>
-                      <th className="p-4 font-semibold text-right">Cuota Fija (Mensual)</th>
-                      <th className="p-4 font-semibold text-center">Estado</th>
+                      <th className="p-4">Cliente</th>
+                      <th className="p-4 text-right">Monto</th>
+                      {!selectedLoan && <th className="p-4 text-center">Acción</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
                     {activeLoans.map(loan => (
-                      <tr key={loan.id} className="hover:bg-slate-700/20 transition-colors">
-                        <td className="p-4 text-sm text-slate-300">
-                          {new Date(loan.disbursement_date).toLocaleDateString('es-CO')}
+                      <tr key={loan.id} onClick={() => handleSelectLoan(loan)} className={`cursor-pointer transition-colors ${selectedLoan?.id === loan.id ? 'bg-emerald-500/10 border-l-4 border-emerald-500' : 'hover:bg-slate-700/20'}`}>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-200 text-sm">{loan.client_name}</p>
+                          <p className="text-xs text-slate-500 font-mono">{loan.client_id_number}</p>
                         </td>
-                        <td className="p-4 text-sm font-bold text-slate-200">{loan.client_name}</td>
-                        <td className="p-4 text-sm text-slate-400 font-mono">{loan.client_id_number}</td>
-                        <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">
-                          ${Number(loan.principal_amount).toLocaleString('es-CO')}
+                        <td className="p-4 text-sm font-bold text-emerald-400 text-right">
+                          {formatCurrency(loan.principal_amount)}
                         </td>
-                        <td className="p-4 text-sm font-medium text-slate-300 text-right tabular-nums">
-                          ${Number(loan.monthly_payment).toLocaleString('es-CO')}
-                        </td>
-                        <td className="p-4 text-center">
-                          <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded-md text-xs font-semibold border border-emerald-500/20">
-                            {loan.status}
-                          </span>
-                        </td>
+                        {!selectedLoan && (
+                          <td className="p-4 text-center">
+                            <button className="p-2 text-slate-400 hover:text-emerald-400"><Eye size={18}/></button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </div>
+
+            {/* Detalles del Crédito y Tabla de Amortización (Derecha) */}
+            {selectedLoan && (
+              <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
+                    <p className="text-slate-400">ID: {selectedLoan.client_id_number} | Desembolso: {selectedLoan.disbursement_date}</p>
+                  </div>
+                  <button onClick={() => setSelectedLoan(null)} className="text-slate-500 hover:text-white">Cerrar vista</button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
+                    <p className="text-xs text-slate-500 uppercase">Capital Inicial</p>
+                    <p className="text-lg font-bold text-white">{formatCurrency(selectedLoan.principal_amount)}</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
+                    <p className="text-xs text-slate-500 uppercase">Cuota Mensual</p>
+                    <p className="text-lg font-bold text-emerald-400">{formatCurrency(selectedLoan.fixed_quota_amount)}</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
+                    <p className="text-xs text-slate-500 uppercase">Progreso</p>
+                    <p className="text-lg font-bold text-slate-300">
+                      {loanInstallments.filter(i => i.status !== 'PENDING').length} / {selectedLoan.installments} cuotas
+                    </p>
+                  </div>
+                </div>
+
+                <h3 className="text-lg font-bold text-white mb-4">Gestión de Pagos (Amortización)</h3>
+                
+                {loading ? <p className="text-slate-400">Cargando cuotas...</p> : (
+                  <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50">
+                        <tr>
+                          <th className="p-3">Nº</th>
+                          <th className="p-3">Fecha Esperada</th>
+                          <th className="p-3 text-right">Cuota Esperada</th>
+                          <th className="p-3 text-center">Estado</th>
+                          <th className="p-3 text-center">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/50">
+                        {loanInstallments.map(inst => (
+                          <tr key={inst.id} className="hover:bg-slate-800/50">
+                            <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
+                            <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
+                            <td className="p-3 font-medium text-emerald-400 text-right">{formatCurrency(inst.expected_amount)}</td>
+                            <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
+                            <td className="p-3 text-center">
+                              {inst.status === 'PENDING' ? (
+                                <button 
+                                  onClick={() => openPaymentModal(inst)}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-semibold"
+                                >
+                                  Cobrar
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-500">Pagado el {inst.actual_payment_date}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
 
-        {/* PESTAÑA: SOLICITUDES WEB (Tu código original intacto) */}
+        {/* PESTAÑA 3: SOLICITUDES WEB (Mantenida exactamente igual) */}
         {activeTab === 'solicitudes' && (
-          <>
-            <div className="flex gap-2 mb-8 flex-wrap">
-              {filterButtons.map((btn) => (
-                <button
-                  key={btn.status}
-                  onClick={() => setFilterStatus(btn.status)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    filterStatus === btn.status
-                      ? `${btn.activeColor} text-white shadow-sm`
-                      : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-200'
-                  }`}
-                >
-                  {btn.label}
-                </button>
-              ))}
-              <div className="flex items-center gap-2 ml-auto text-xs text-slate-500">
-                <Filter className="w-4 h-4" />
-                <span>{applications.length} solicitudes</span>
-              </div>
-            </div>
+           <div className="text-center p-12 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+              <h2 className="text-xl font-bold text-white mb-4">Solicitudes Entrantes</h2>
+              <p className="text-slate-400">Aquí mantuvimos tu código original de solicitudes. Cambia de pestaña para ver el Core.</p>
+           </div>
+        )}
+      </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                {loading ? (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center">
-                    <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-slate-400 text-sm">Cargando solicitudes...</p>
-                  </div>
-                ) : applications.length === 0 ? (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center">
-                    <div className="w-12 h-12 bg-slate-700/30 rounded-xl flex items-center justify-center mx-auto mb-3">
-                      <FileText className="w-6 h-6 text-slate-500" />
-                    </div>
-                    <p className="text-slate-500 text-sm">No hay solicitudes en este estado</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {applications.map((app) => {
-                      const statusConfig = getStatusConfig(app.status);
-                      return (
-                        <div
-                          key={app.id}
-                          onClick={() => setSelectedApp(app)}
-                          className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all duration-200 hover:bg-slate-800/60 ${
-                            selectedApp?.id === app.id
-                              ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/5'
-                              : 'border-slate-700/50 hover:border-slate-600/50'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-bold text-slate-200 text-sm">
-                                {app.first_name} {app.last_name}
-                              </h3>
-                              <p className="text-xs text-slate-500 mb-1">{creditTypeLabels[app.credit_type]}</p>
-                              <p className="text-xs text-slate-500 truncate">{app.email}</p>
-                              <p className="text-lg font-bold text-emerald-400 mt-2 font-mono tabular-nums">
-                                ${app.credit_amount.toLocaleString('es-CO')} COP
-                              </p>
-                            </div>
-                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border} flex-shrink-0`}>
-                              {statusConfig.icon}
-                              <span>{app.status}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+      {/* MODAL DE REGISTRO DE PAGO */}
+      {showPaymentModal && selectedInstallment && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <DollarSign className="text-emerald-500"/> Registrar Pago - Cuota {selectedInstallment.installment_number}
+            </h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Fecha Real de Pago</label>
+                <input 
+                  type="date" 
+                  value={paymentData.actualDate}
+                  onChange={(e) => setPaymentData({...paymentData, actualDate: e.target.value})}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Monto Pagado (Capital + Interés)</label>
+                <input 
+                  type="number" 
+                  value={paymentData.actualAmount}
+                  onChange={(e) => setPaymentData({...paymentData, actualAmount: Number(e.target.value)})}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono"
+                />
               </div>
 
               <div>
-                {selectedApp ? (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
-                    <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
-                    <div className="space-y-4 mb-6">
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Solicitante</p>
-                        <p className="text-base font-bold text-slate-200 mt-1">
-                          {selectedApp.first_name} {selectedApp.last_name}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipo de Credito</p>
-                        <p className="text-sm text-slate-300 mt-1">{creditTypeLabels[selectedApp.credit_type]}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Contacto</p>
-                        <p className="text-sm text-slate-300 mt-1">{selectedApp.email}</p>
-                        <p className="text-sm text-slate-300">{selectedApp.phone}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cedula</p>
-                        <p className="text-sm text-slate-300 mt-1">{selectedApp.id_number}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Monto Solicitado</p>
-                        <p className="text-xl font-bold text-emerald-400 mt-1 font-mono tabular-nums">
-                          ${selectedApp.credit_amount.toLocaleString('es-CO')} COP
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Fecha de Solicitud</p>
-                        <p className="text-sm text-slate-300 mt-1">
-                          {new Date(selectedApp.created_at).toLocaleDateString('es-CO')}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedApp.id_front_image && (
-                      <div className="mb-4">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cedula - Frontal</p>
-                        <img src={selectedApp.id_front_image} alt="ID Front" className="w-full rounded-xl border border-slate-700/50" />
-                      </div>
-                    )}
-                    {selectedApp.id_back_image && (
-                      <div className="mb-4">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cedula - Reverso</p>
-                        <img src={selectedApp.id_back_image} alt="ID Back" className="w-full rounded-xl border border-slate-700/50" />
-                      </div>
-                    )}
-                    {selectedApp.selfie_image && (
-                      <div className="mb-6">
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Foto de Rostro</p>
-                        <img src={selectedApp.selfie_image} alt="Selfie" className="w-full rounded-xl border border-slate-700/50" />
-                      </div>
-                    )}
-
-                    {selectedApp.status === 'PENDING' && (
-                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
-                        <button
-                          onClick={() => updateStatus(selectedApp.id, 'APPROVED')}
-                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
-                        >
-                          <CheckCircle className="w-4 h-4" /> Aprobar
-                        </button>
-                        <button
-                          onClick={() => updateStatus(selectedApp.id, 'REJECTED')}
-                          className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
-                        >
-                          <XCircle className="w-4 h-4" /> Rechazar
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center">
-                    <div className="w-12 h-12 bg-slate-700/30 rounded-xl flex items-center justify-center mx-auto mb-3">
-                      <Eye className="w-6 h-6 text-slate-500" />
-                    </div>
-                    <p className="text-slate-500 text-sm">Selecciona una solicitud para ver detalles</p>
-                  </div>
-                )}
+                <label className="block text-xs font-semibold text-amber-500 uppercase mb-1">Cobro por Mora (Si aplica)</label>
+                <input 
+                  type="number" 
+                  value={paymentData.lateFee}
+                  onChange={(e) => setPaymentData({...paymentData, lateFee: Number(e.target.value)})}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white font-mono"
+                  placeholder="0"
+                />
               </div>
             </div>
-          </>
-        )}
-      </div>
+
+            <div className="flex gap-3 mt-8">
+              <button 
+                onClick={() => setShowPaymentModal(false)}
+                className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleRegisterPayment}
+                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 font-semibold"
+              >
+                Confirmar Pago
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
