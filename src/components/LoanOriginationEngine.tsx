@@ -213,18 +213,19 @@ export default function LoanOriginationEngine() {
     setActivating(true);
     
     try {
+      // 1. Guardar el crédito maestro con los nombres de columnas de Supabase
       const { data: loanData, error: loanError } = await supabase
         .from('active_loans')
         .insert({
           loan_number: params.loanNumber || null,
           client_name: params.clientName,
-          client_id_number: params.clientId,
-          principal_amount: params.principalAmount,
-          origination_costs: params.originationCosts,
+          client_id: params.clientId,
+          loan_amount: params.principalAmount,
+          associated_costs: params.originationCosts,
           disbursement_date: params.disbursementDate,
-          nominal_rate_mv: params.nominalRateMV,
-          term_months: params.termMonths,
-          monthly_payment: result.monthlyPayment,
+          interest_rate_monthly: params.nominalRateMV,
+          installments: params.termMonths,
+          fixed_quota_amount: result.monthlyPayment,
           total_payment: result.totalPayment,
           tir: result.tir,
           status: 'ACTIVE'
@@ -237,6 +238,7 @@ export default function LoanOriginationEngine() {
         throw new Error(loanError.message);
       }
 
+      // 2. Guardar las cuotas individuales
       const installmentsToInsert = result.rows.map(row => {
         const paymentDate = new Date(params.disbursementDate);
         paymentDate.setMonth(paymentDate.getMonth() + row.installmentNumber);
@@ -512,6 +514,7 @@ export default function LoanOriginationEngine() {
                   </div>
                 </div>
 
+                {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={handleExportPDF}
@@ -535,9 +538,9 @@ export default function LoanOriginationEngine() {
         </div>
       </div>
 
-      {/* RESTAURADA: Tabla de Amortización */}
+      {/* Amortization Table */}
       {result && (
-        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden mt-6">
+        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <div
             className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
             onClick={() => setShowFullTable(!showFullTable)}
@@ -551,7 +554,11 @@ export default function LoanOriginationEngine() {
                 <p className="text-xs text-slate-500">{result.rows.length} cuotas | Cuota fija: {formatCurrency(result.monthlyPayment)}</p>
               </div>
             </div>
-            {showFullTable ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+            {showFullTable ? (
+              <ChevronUp className="w-5 h-5 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-400" />
+            )}
           </div>
 
           {(showFullTable ? result.rows : result.rows.slice(0, 5)).length > 0 && (
