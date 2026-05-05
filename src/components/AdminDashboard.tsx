@@ -12,14 +12,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
+  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
+  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -27,7 +30,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME'
+    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
   useEffect(() => {
@@ -154,14 +157,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    // Calcular Saldo Vivo Exacto restando el abono al saldo que venía
     const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
     let newBalance = previousPendingPrincipal - excedenteCapital;
     
@@ -188,7 +189,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         let principal = newFixedQuota - interest;
 
         if (i === futureInstallments.length - 1) principal = currentBalance;
-        if (newBalance <= 0) { principal = 0; interest = 0; }
         
         updates.push({
           id: inst.id,
@@ -250,6 +250,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
+      console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
+
       const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
       const { error } = await supabase.from('loan_installments').update({
@@ -264,7 +266,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       if (abonoCapitalExtra > 10) {
         await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado. Cuotas futuras recalculadas.`);
+        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -274,10 +276,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
+      console.error("Error en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
 
+  // --- CÁLCULO VISUAL DEL SALDO VIVO BLINDADO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
     
@@ -297,7 +301,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Cuota Total Esperada,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
     
     let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     
@@ -311,7 +315,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         tempBalanceForExcel = saldoFinal;
 
         const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-        const cuotaTotalEsperada = Number(row.expected_amount) + costosAsociados;
+        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
 
         const rowData = [
           row.installment_number, 
@@ -321,7 +325,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           row.principal_portion,
           row.interest_portion, 
           row.late_fee_charged,
-          cuotaTotalEsperada,
+          valorCuotaTotal,
           saldoFinal,
           row.status, 
           row.actual_payment_date || 'N/A', 
