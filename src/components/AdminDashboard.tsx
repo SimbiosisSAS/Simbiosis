@@ -12,14 +12,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
+  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
+  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -27,7 +30,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME'
+    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
   useEffect(() => {
@@ -59,11 +62,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     setLoading(false);
   };
 
-  const handleSelectLoan = (loan: any) => {
-    setSelectedLoan(loan);
-    fetchInstallments(loan.id);
-  };
-
   const fetchUsuryRates = async () => {
     const { data, error } = await supabase.from('usury_rates').select('*').order('period_year', { ascending: false }).order('period_month', { ascending: false });
     if (!error) setUsuryRates(data || []);
@@ -85,11 +83,19 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
+  const handleSelectLoan = (loan: any) => {
+    setSelectedLoan(loan);
+    fetchInstallments(loan.id);
+  };
+
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}?`)) {
+    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`);
+    
+    if (confirmDelete) {
       try {
-        await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+        const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+        if (error) throw error;
         alert('Crédito eliminado exitosamente');
         setSelectedLoan(null);
         fetchActiveLoans();
@@ -114,7 +120,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     for (let i = 1; i <= totalDaysLate; i++) {
       const currentLateDay = new Date(expected.getTime());
       currentLateDay.setDate(expected.getDate() + i);
-      const rateRecord = usuryRates.find(r => r.period_month === (currentLateDay.getMonth() + 1) && r.period_year === currentLateDay.getFullYear());
+      const currentMonth = currentLateDay.getMonth() + 1;
+      const currentYear = currentLateDay.getFullYear();
+
+      const rateRecord = usuryRates.find(r => r.period_month === currentMonth && r.period_year === currentYear);
       const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
       penalty += amount * dailyRate;
     }
@@ -148,21 +157,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- MATEMÁTICA BANCARIA CORREGIDA ---
+  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    // Calculamos el Saldo Vivo EXACTO usando el capital original menos todo lo pagado hasta hoy
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalPagadoHistorico = loanInstallments
-      .filter(i => i.status === 'PAID' || i.status === 'LATE' || i.id === selectedInstallment.id)
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    // Calcular Saldo Vivo Exacto restando el excedente al saldo pendiente original
+    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    let newBalance = previousPendingPrincipal - excedenteCapital;
     
-    // El nuevo saldo es lo que debía MENOS el abono gigante que acaba de hacer
-    let newBalance = capitalOriginal - capitalPagadoHistorico - excedenteCapital;
     if (newBalance <= 0) newBalance = 0;
 
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
@@ -172,7 +177,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const updates = [];
 
     if (strategy === 'REDUCE_QUOTA') {
-      // ESTRATEGIA: REDUCIR CUOTA (Recalcula el Monto Base de la cuota)
       const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -198,7 +202,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         currentBalance -= principal;
       }
     } else {
-      // ESTRATEGIA: REDUCIR TIEMPO (Anula las últimas cuotas)
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -249,7 +252,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
-      // 1. Guardar el pago actual (sumando el abono extra al principal de esta cuota)
       const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
       const { error } = await supabase.from('loan_installments').update({
@@ -257,13 +259,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         actual_payment_date: paymentData.actualDate,
         actual_amount_paid: pagoReal,
         late_fee_charged: moraCobrada,
-        principal_portion: nuevoPrincipalPagadoEstaCuota // Guardamos el capital real que pagó hoy
+        principal_portion: nuevoPrincipalPagadoEstaCuota
       }).eq('id', selectedInstallment.id);
 
       if (error) throw error;
 
-      // 2. Si hubo abono extra, recalcular las cuotas futuras
       if (abonoCapitalExtra > 0.5) {
+        console.log("¡ABONO DETECTADO! Ejecutando recálculo con:", abonoCapitalExtra);
         await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
         alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado. Cuotas futuras recalculadas con estrategia: ${paymentData.extraPaymentType === 'REDUCE_QUOTA' ? 'Reducir Cuota' : 'Reducir Plazo'}.`);
       } else {
@@ -274,31 +276,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
+      console.error("Error en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
 
-  // --- CÁLCULO VISUAL CORREGIDO PARA LA TARJETA ---
+  // --- CÁLCULO VISUAL DEL SALDO VIVO BLINDADO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
     
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    
-    // Solo restamos el capital de las cuotas que ya se pagaron
-    const capitalPagado = loanInstallments
-      .filter(i => i.status === 'PAID' || i.status === 'LATE')
+    // El saldo vivo es simplemente la suma matemática del capital que falta por cobrar
+    const saldoPendiente = loanInstallments
+      .filter(i => i.status === 'PENDING')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
       
-    const saldo = capitalOriginal - capitalPagado;
-    
-    // Evitar el error visual de 199.999.999 mostrando el original si no han pagado nada
-    return capitalPagado === 0 ? capitalOriginal : (saldo > 0 ? saldo : 0);
+    return saldoPendiente > 0 ? saldoPendiente : 0;
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Cuota Esperada,Capital,Interes,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
     loanInstallments.forEach(row => {
+      // Ocultamos las cuotas anuladas también en el Excel
       if (row.status !== 'PAID_EARLY') {
         const rowData = [
           row.installment_number, row.expected_payment_date, row.expected_amount, row.principal_portion,
@@ -369,8 +368,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         
+        {/* PESTAÑA: SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
+        {/* PESTAÑA: CONFIGURACIÓN DE TASAS */}
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
@@ -418,6 +419,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
+        {/* PESTAÑA: CARTERA ACTIVA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
@@ -531,8 +533,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
-                        {loanInstallments.map(inst => (
-                          <tr key={inst.id} className={`transition-colors ${inst.status === 'PAID_EARLY' ? 'hidden' : 'hover:bg-slate-800/50'}`}>
+                        {loanInstallments
+                          .filter(inst => inst.status !== 'PAID_EARLY')
+                          .map(inst => (
+                          <tr key={inst.id} className="hover:bg-slate-800/50 transition-colors">
                             <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
                             <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
                             <td className="p-3 font-medium text-slate-200 text-right tabular-nums">{formatCurrency(inst.expected_amount)}</td>
@@ -540,12 +544,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-center">
                               {inst.status === 'PENDING' ? (
                                 <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
-                              ) : inst.status !== 'PAID_EARLY' ? (
+                              ) : (
                                 <div className="text-xs text-slate-400 flex flex-col items-center">
                                   <span>Pagado: {inst.actual_payment_date}</span>
                                   <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
                                 </div>
-                              ) : null}
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -558,7 +562,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA: SOLICITUDES WEB */}
+        {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
           <>
             <div className="flex gap-2 mb-8 flex-wrap">
