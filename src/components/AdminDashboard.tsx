@@ -12,14 +12,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
+  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
+  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -27,7 +30,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME' 
+    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
   useEffect(() => {
@@ -154,14 +157,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
+  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN (EXCEL-STYLE) ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let newBalance = previousPendingPrincipal - excedenteCapital;
+    // LA CORRECCIÓN EXACTA: El nuevo saldo base es el Capital Original MENOS todo lo pagado a capital históricamente
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
+    const capitalPagadoHistorico = loanInstallments
+      .filter(i => i.status === 'PAID' || i.status === 'LATE' || i.id === selectedInstallment.id)
+      .reduce((sum, i) => {
+        // Sumamos la porción de principal normal de cada cuota.
+        // Si es la cuota actual, le sumamos el excedente extra que acaba de pagar.
+        if (i.id === selectedInstallment.id) {
+          return sum + Number(i.principal_portion) + excedenteCapital;
+        }
+        return sum + Number(i.principal_portion);
+      }, 0);
+
+    let newBalance = capitalOriginal - capitalPagadoHistorico;
     
     if (newBalance <= 0) newBalance = 0;
 
@@ -186,7 +203,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         let principal = newFixedQuota - interest;
 
         if (i === futureInstallments.length - 1) principal = currentBalance;
-        
+        if (newBalance <= 0) { principal = 0; interest = 0; }
+
         updates.push({
           id: inst.id,
           expected_amount: Math.round(principal + interest),
@@ -247,6 +265,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
+      console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
+
       const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
       const { error } = await supabase.from('loan_installments').update({
@@ -261,7 +281,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       if (abonoCapitalExtra > 10) {
         await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Abono a capital aplicado! Cuotas futuras recalculadas con estrategia: ${paymentData.extraPaymentType === 'REDUCE_QUOTA' ? 'Reducir Cuota' : 'Reducir Plazo'}.`);
+        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado. Cuotas futuras recalculadas con estrategia: ${paymentData.extraPaymentType === 'REDUCE_QUOTA' ? 'Reducir Cuota' : 'Reducir Plazo'}.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -289,7 +309,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const openingBalance = currentBalance;
       const principal = Number(inst.principal_portion);
       const interest = Number(inst.interest_portion);
-      const associatedCosts = inst.installment_number === 1 ? Number(selectedLoan.associated_costs || 0) : 0;
+      const associatedCosts = inst.installment_number === 1 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
       const expectedAmount = Number(inst.expected_amount);
       const mora = Number(inst.late_fee_charged || 0);
       const totalPaid = Number(inst.actual_amount_paid || 0);
@@ -412,10 +432,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         
-        {/* PESTAÑA: SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
-        {/* PESTAÑA: CONFIGURACIÓN DE TASAS */}
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
@@ -463,7 +481,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA: CARTERA ACTIVA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-4 gap-6">
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-4'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
@@ -589,7 +606,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-slate-400">{row.expected_payment_date}</td>
                             <td className="p-3 text-slate-300 text-right tabular-nums">{formatCurrency(row.openingBalance)}</td>
                             <td className="p-3 text-slate-400 text-right tabular-nums">{row.associatedCosts > 0 ? formatCurrency(row.associatedCosts) : '--'}</td>
-                            <td className="p-3 text-slate-200 text-right tabular-nums">{formatCurrency(row.principal)}</td>
+                            <td className="p-3 text-emerald-400 text-right tabular-nums">{formatCurrency(row.principal)}</td>
                             <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(row.interest)}</td>
                             <td className="p-3 text-red-400/80 text-right tabular-nums">{row.mora > 0 ? formatCurrency(row.mora) : '--'}</td>
                             <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">
@@ -615,7 +632,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA 3: SOLICITUDES WEB */}
+        {/* PESTAÑA: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
           <>
             <div className="flex gap-2 mb-8 flex-wrap">
