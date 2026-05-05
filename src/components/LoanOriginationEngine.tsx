@@ -219,13 +219,13 @@ export default function LoanOriginationEngine() {
         .insert({
           loan_number: params.loanNumber || null,
           client_name: params.clientName,
-          client_id_number: params.clientId,       // ALINEADO CON BD
-          loan_amount: params.principalAmount, // ALINEADO CON BD
-          origination_costs: params.originationCosts,
+          client_id_number: params.clientId,
+          loan_amount: params.principalAmount,            // CORREGIDO PARA BD
+          associated_costs: params.originationCosts,      // CORREGIDO PARA BD
           disbursement_date: params.disbursementDate,
-          nominal_rate_mv: params.nominalRateMV,
-          term_months: params.termMonths,
-          monthly_payment: result.monthlyPayment,
+          interest_rate_monthly: params.nominalRateMV,    // CORREGIDO PARA BD
+          installments: params.termMonths,                // CORREGIDO PARA BD
+          fixed_quota_amount: result.monthlyPayment,
           total_payment: result.totalPayment,
           tir: result.tir,
           status: 'ACTIVE'
