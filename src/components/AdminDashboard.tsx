@@ -243,39 +243,53 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
-  const handleRegisterPayment = async () => {
+const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
+    
     try {
+      // 1. Aseguramos que todo sea numérico y limpio
+      const actualAmountPaid = parseFloat(paymentData.actualAmount.toString()) || 0;
+      const lateFeeCharged = parseFloat(paymentData.lateFee.toString()) || 0;
+      const expectedBaseAmount = parseFloat(selectedInstallment.expected_amount.toString()) || 0;
+      
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
-      const expectedTotal = Number(selectedInstallment.expected_amount) + Number(paymentData.lateFee);
-      const excedente = Number(paymentData.actualAmount) - expectedTotal;
+      
+      // La cuota esperada total es la cuota base + lo que le vas a cobrar de mora
+      const expectedTotal = expectedBaseAmount + lateFeeCharged;
+      
+      // El abono a capital es lo que pagó por encima de la cuota total esperada
+      const excedente = actualAmountPaid - expectedTotal;
 
-      // Actualizar la cuota actual
+      // 2. Guardamos el pago de la cuota actual
       const { error } = await supabase.from('loan_installments').update({
         status: status,
         actual_payment_date: paymentData.actualDate,
-        actual_amount_paid: paymentData.actualAmount,
-        late_fee_charged: paymentData.lateFee
+        actual_amount_paid: actualAmountPaid,
+        late_fee_charged: lateFeeCharged
       }).eq('id', selectedInstallment.id);
 
       if (error) throw error;
 
-      // Si hubo abono a capital, recalcular el futuro
-      if (excedente > 0) {
+      // 3. Forzamos el recálculo SI Y SOLO SI hay un excedente de al menos $1 peso
+      if (excedente > 0.5) { // Usamos 0.5 por seguridad de redondeo decimal
+        console.log(`Iniciando recálculo. Abono a capital detectado: ${excedente}`);
         await recalculateFutureInstallments(excedente, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono a capital de ${formatCurrency(excedente)} aplicado. Cuotas futuras recalculadas.`);
+        alert(`¡Pago registrado! Abono a capital de ${formatCurrency(excedente)} aplicado. Cuotas futuras recalculadas con la estrategia: ${paymentData.extraPaymentType}.`);
       } else {
-        alert('¡Pago registrado con éxito!');
+        alert('¡Pago de cuota normal registrado con éxito!');
       }
 
       setShowPaymentModal(false);
+      
+      // 4. Refrescamos toda la tabla para que el nuevo "Saldo Vivo" se refleje al instante
       await fetchInstallments(selectedLoan.id); 
+      
     } catch (err: any) {
+      console.error("Error crítico en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
-
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Cuota Esperada,Capital,Interes,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
