@@ -81,12 +81,17 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
   const r = nominalRateMV / 100;
   const n = termMonths;
-  const P = principalAmount;
+  
+  // EL CAMBIO CLAVE: El monto a financiar (sobre el que se calcula todo) INCLUYE los costos.
+  const amountToFinance = principalAmount + originationCosts;
 
-  const fixedPayment = P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  // Calculamos la cuota fija mensual sobre el TOTAL financiado
+  const fixedPayment = amountToFinance * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
 
   const rows: AmortizationRow[] = [];
-  let balance = P;
+  
+  // El balance arranca en el monto total financiado
+  let balance = amountToFinance;
   const startDate = new Date(disbursementDate + 'T00:00:00');
 
   for (let i = 1; i <= n; i++) {
@@ -95,13 +100,15 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
     const interestPortion = balance * r;
     let principalPortion = fixedPayment - interestPortion;
+    
+    // Los costos solo se muestran visualmente en la cuota 1, pero ya están financiados en el saldo
     const costs = i === 1 ? originationCosts : 0;
 
     if (i === n) {
-      principalPortion = balance;
+      principalPortion = balance; // Ajuste final por decimales
     }
 
-    const totalPaymentForPeriod = fixedPayment + costs;
+    const totalPaymentForPeriod = fixedPayment; // La cuota ya es igual todos los meses
     const closingBalance = i === n ? 0 : Math.max(0, balance - principalPortion);
 
     rows.push({
@@ -119,6 +126,8 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   }
 
   const totalPayment = rows.reduce((sum, row) => sum + row.paymentAmount, 0);
+  
+  // La TIR se calcula sobre lo que realmente le entregaste al cliente (principalAmount)
   const tir = calculateTIR(principalAmount, originationCosts, fixedPayment, termMonths);
 
   return {
