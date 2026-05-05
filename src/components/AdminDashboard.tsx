@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2 } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador' | 'configuracion';
@@ -29,7 +29,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualDate: new Date().toISOString().split('T')[0],
     actualAmount: 0,
     lateFee: 0,
-    daysLate: 0
+    daysLate: 0,
+    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
   useEffect(() => {
@@ -69,21 +70,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const handleAddUsuryRate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Usamos upsert: Si la combinación (mes, año) ya existe, la sobrescribe. Si no, la crea.
       const { error } = await supabase.from('usury_rates').upsert(
-        {
-          period_month: newRate.month,
-          period_year: newRate.year,
-          daily_late_rate: Number(newRate.rate)
-        },
-        { onConflict: 'period_month,period_year' } // La regla que le dice a la BD cómo buscar duplicados
+        { period_month: newRate.month, period_year: newRate.year, daily_late_rate: Number(newRate.rate) },
+        { onConflict: 'period_month,period_year' }
       );
-
       if (error) throw error;
-      
-      alert('Tasa guardada/actualizada exitosamente');
-      fetchUsuryRates(); // Refrescar la tabla
-      setNewRate({ ...newRate, rate: '' }); // Limpiar el input
+      alert('Tasa guardada exitosamente');
+      fetchUsuryRates();
+      setNewRate({ ...newRate, rate: '' });
     } catch (err: any) {
       alert('Error guardando tasa. Detalle: ' + err.message);
     }
@@ -94,12 +88,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     fetchInstallments(loan.id);
   };
 
+  // --- NUEVA FUNCIÓN: ELIMINAR CRÉDITO ---
+  const handleDeleteLoan = async () => {
+    if (!selectedLoan) return;
+    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`);
+    
+    if (confirmDelete) {
+      try {
+        const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+        if (error) throw error;
+        alert('Crédito eliminado exitosamente');
+        setSelectedLoan(null);
+        fetchActiveLoans();
+      } catch (err: any) {
+        alert('Error al eliminar el crédito: ' + err.message);
+      }
+    }
+  };
+
   // --- LÓGICA FINANCIERA: CALCULAR MORA CON TASAS DE BD ---
   const calculateLateFee = (expectedDateStr: string, actualDateStr: string, amount: number) => {
     const expected = new Date(expectedDateStr);
     const actual = new Date(actualDateStr);
-    
-    // Resetear horas para comparar solo días
     expected.setHours(0, 0, 0, 0);
     actual.setHours(0, 0, 0, 0);
 
@@ -109,23 +119,16 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     if (totalDaysLate <= 0) return { days: 0, penalty: 0 };
 
     let penalty = 0;
-    // Iterar día por día para aplicar la tasa correcta del mes en que cae ese día de mora
     for (let i = 1; i <= totalDaysLate; i++) {
       const currentLateDay = new Date(expected.getTime());
       currentLateDay.setDate(expected.getDate() + i);
-      
       const currentMonth = currentLateDay.getMonth() + 1;
       const currentYear = currentLateDay.getFullYear();
 
-      // Buscar la tasa para ese mes específico
       const rateRecord = usuryRates.find(r => r.period_month === currentMonth && r.period_year === currentYear);
-      
-      // Si no hay tasa configurada para ese mes, usa 0 (para no cobrar de más injustamente, o puedes poner un fallback)
       const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
-      
       penalty += amount * dailyRate;
     }
-
     return { days: totalDaysLate, penalty: Math.round(penalty) };
   };
 
@@ -138,7 +141,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       actualDate: today,
       lateFee: moraCalc.penalty,
       daysLate: moraCalc.days,
-      actualAmount: Number(installment.expected_amount) + moraCalc.penalty
+      actualAmount: Number(installment.expected_amount) + moraCalc.penalty,
+      extraPaymentType: 'REDUCE_TIME'
     });
     setShowPaymentModal(true);
   };
@@ -155,7 +159,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  const recalculateFutureInstallments = async (excedenteCapital: number) => {
+  // --- LÓGICA FINANCIERA: RECALCULAR AMORTIZACIÓN (ABONOS A CAPITAL) ---
+  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
@@ -165,23 +170,48 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
     const remainingMonths = futureInstallments.length;
-    const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
-
     let currentBalance = newBalance;
-    for (let i = 0; i < futureInstallments.length; i++) {
-      const inst = futureInstallments[i];
-      const interest = currentBalance * rate;
-      let principal = newFixedQuota - interest;
 
-      if (i === futureInstallments.length - 1) principal = currentBalance;
-      if (newBalance <= 0) { principal = 0; interest = 0; }
+    if (strategy === 'REDUCE_QUOTA') {
+      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        const interest = currentBalance * rate;
+        let principal = newFixedQuota - interest;
 
-      await supabase.from('loan_installments').update({
-        expected_amount: newBalance <= 0 ? 0 : Math.round(newFixedQuota),
-        principal_portion: Math.round(principal),
-        interest_portion: Math.round(interest)
-      }).eq('id', inst.id);
-      currentBalance -= principal;
+        if (i === futureInstallments.length - 1) principal = currentBalance;
+        if (newBalance <= 0) { principal = 0; interest = 0; }
+
+        await supabase.from('loan_installments').update({
+          expected_amount: newBalance <= 0 ? 0 : Math.round(newFixedQuota),
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest)
+        }).eq('id', inst.id);
+        currentBalance -= principal;
+      }
+    } else {
+      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        
+        if (currentBalance <= 0) {
+          await supabase.from('loan_installments').update({
+            expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY'
+          }).eq('id', inst.id);
+          continue;
+        }
+
+        const interest = currentBalance * rate;
+        let principal = fixedQuota - interest;
+        if (currentBalance < principal) principal = currentBalance;
+
+        await supabase.from('loan_installments').update({
+          expected_amount: Math.round(principal + interest),
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest)
+        }).eq('id', inst.id);
+        currentBalance -= principal;
+      }
     }
   };
 
@@ -203,8 +233,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       if (error) throw error;
 
       if (excedente > 0) {
-        await recalculateFutureInstallments(excedente);
-        alert(`¡Pago registrado! Se detectó abono a capital de ${formatCurrency(excedente)}. Cuotas recalculadas.`);
+        await recalculateFutureInstallments(excedente, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
+        alert(`¡Pago registrado! Abono a capital de ${formatCurrency(excedente)} aplicado. Cuotas futuras recalculadas.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -250,6 +280,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     switch (status) {
       case 'PAID': return <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">Al día</span>;
       case 'LATE': return <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">Mora</span>;
+      case 'PAID_EARLY': return <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">Anulado</span>;
       default: return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">Pendiente</span>;
     }
   };
@@ -396,7 +427,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
                     <p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
                   </div>
-                  <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700">Cerrar</button>
+                  <div className="flex gap-2">
+                    <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
+                      <Trash2 size={14} /> Eliminar
+                    </button>
+                    <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
@@ -413,7 +451,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Cuotas Pagadas</p>
                     <p className="text-lg font-bold text-slate-300">
-                      {loanInstallments.filter(i => i.status !== 'PENDING').length} <span className="text-sm text-slate-500">de {selectedLoan.installments || selectedLoan.term_months}</span>
+                      {loanInstallments.filter(i => i.status !== 'PENDING' && i.status !== 'PAID_EARLY').length} <span className="text-sm text-slate-500">de {selectedLoan.installments || selectedLoan.term_months}</span>
                     </p>
                   </div>
                 </div>
@@ -446,7 +484,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
                             <td className="p-3 text-center">
                               {inst.status === 'PENDING' ? (
-                                <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+                                <button 
+                                  onClick={() => openPaymentModal(inst)}
+                                  className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors"
+                                >
+                                  Cobrar
+                                </button>
+                              ) : inst.status === 'PAID_EARLY' ? (
+                                <span className="text-xs text-slate-500">-</span>
                               ) : (
                                 <div className="text-xs text-slate-400 flex flex-col items-center">
                                   <span>Pagado: {inst.actual_payment_date}</span>
@@ -465,7 +510,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA: SOLICITUDES WEB */}
+        {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
           <>
             <div className="flex gap-2 mb-8 flex-wrap">
@@ -539,7 +584,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">1. Fecha Real de Pago</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">1. Fecha Real de Pago (Calcula Mora)</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                   <input 
@@ -586,17 +631,44 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     placeholder="Ej: 600000"
                   />
                 </div>
+                
                 {paymentData.actualAmount > (Number(selectedInstallment.expected_amount) + paymentData.lateFee) && (
-                  <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
-                    <Sparkles size={12}/> Abono extra de {formatCurrency(paymentData.actualAmount - (Number(selectedInstallment.expected_amount) + paymentData.lateFee))}. Se recalcularán las cuotas futuras.
-                  </p>
+                  <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                    <p className="text-xs text-emerald-400 mb-3 font-semibold flex items-center gap-1">
+                      <Sparkles size={14}/> Abono extra de {formatCurrency(paymentData.actualAmount - (Number(selectedInstallment.expected_amount) + paymentData.lateFee))}. ¿Cómo aplicar el excedente?
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg transition-colors">
+                        <input 
+                          type="radio" 
+                          name="extraPaymentStrategy" 
+                          value="REDUCE_TIME"
+                          checked={paymentData.extraPaymentType === 'REDUCE_TIME'}
+                          onChange={(e) => setPaymentData({...paymentData, extraPaymentType: e.target.value})}
+                          className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"
+                        />
+                        Reducir Plazo (Terminar el crédito antes)
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg transition-colors">
+                        <input 
+                          type="radio" 
+                          name="extraPaymentStrategy" 
+                          value="REDUCE_QUOTA"
+                          checked={paymentData.extraPaymentType === 'REDUCE_QUOTA'}
+                          onChange={(e) => setPaymentData({...paymentData, extraPaymentType: e.target.value})}
+                          className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"
+                        />
+                        Reducir Cuota (Pagar menos mensualmente)
+                      </label>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="flex gap-3 mt-8">
-              <button onClick={() => setShowPaymentModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 font-medium">Cancelar</button>
-              <button onClick={handleRegisterPayment} className="flex-[2] px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-400 font-bold shadow-lg shadow-emerald-500/20">Aplicar Recaudo</button>
+              <button onClick={() => setShowPaymentModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleRegisterPayment} className="flex-[2] px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-400 hover:to-emerald-500 transition-all font-bold shadow-lg shadow-emerald-500/20">Aplicar Recaudo</button>
             </div>
           </div>
         </div>
