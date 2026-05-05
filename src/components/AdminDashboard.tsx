@@ -69,17 +69,23 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const handleAddUsuryRate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('usury_rates').insert({
-        period_month: newRate.month,
-        period_year: newRate.year,
-        daily_late_rate: Number(newRate.rate)
-      });
+      // Usamos upsert: Si la combinación (mes, año) ya existe, la sobrescribe. Si no, la crea.
+      const { error } = await supabase.from('usury_rates').upsert(
+        {
+          period_month: newRate.month,
+          period_year: newRate.year,
+          daily_late_rate: Number(newRate.rate)
+        },
+        { onConflict: 'period_month,period_year' } // La regla que le dice a la BD cómo buscar duplicados
+      );
+
       if (error) throw error;
-      alert('Tasa agregada exitosamente');
-      fetchUsuryRates();
-      setNewRate({ ...newRate, rate: '' });
+      
+      alert('Tasa guardada/actualizada exitosamente');
+      fetchUsuryRates(); // Refrescar la tabla
+      setNewRate({ ...newRate, rate: '' }); // Limpiar el input
     } catch (err: any) {
-      alert('Error agregando tasa. Asegúrate de no duplicar un mes existente. Detalle: ' + err.message);
+      alert('Error guardando tasa. Detalle: ' + err.message);
     }
   };
 
