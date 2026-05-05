@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME' 
+    extraPaymentType: 'REDUCE_TIME'
   });
 
   useEffect(() => {
@@ -154,24 +154,24 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
+  // --- MATEMÁTICA BANCARIA REESCRITA Y ACORAZADA ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
+    // Calcular el Saldo Vivo EXACTO que queda después del pago de hoy
     const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
     let newBalance = previousPendingPrincipal - excedenteCapital;
-    
     if (newBalance <= 0) newBalance = 0;
 
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    const remainingMonths = futureInstallments.length;
     let currentBalance = newBalance;
-
     const updates = [];
 
     if (strategy === 'REDUCE_QUOTA') {
+      const remainingMonths = futureInstallments.length;
       const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -182,10 +182,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           continue;
         }
 
+        // El interés siempre es el Saldo Inicial * Tasa
         const interest = currentBalance * rate;
         let principal = newFixedQuota - interest;
 
-        if (i === futureInstallments.length - 1) principal = currentBalance;
+        // Ajuste en la última cuota para no cobrar centavos extra
+        if (i === futureInstallments.length - 1 || currentBalance < principal) {
+          principal = currentBalance;
+        }
         
         updates.push({
           id: inst.id,
@@ -197,6 +201,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         currentBalance -= principal;
       }
     } else {
+      // ESTRATEGIA: REDUCIR TIEMPO
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -207,13 +212,18 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           continue;
         }
 
+        // El interés siempre es el Saldo Inicial * Tasa
         const interest = currentBalance * rate;
         let principal = fixedQuota - interest;
         
-        if (currentBalance < principal) principal = currentBalance;
+        // Si el saldo es menor que el principal calculado, esta es la última cuota real
+        if (currentBalance < principal) {
+          principal = currentBalance;
+        }
 
         updates.push({
           id: inst.id,
+          // La cuota total se ajusta en el último mes
           expected_amount: Math.round(principal + interest),
           principal_portion: Math.round(principal),
           interest_portion: Math.round(interest),
@@ -327,12 +337,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // --- CÁLCULO DINÁMICO DE SALDOS PARA LA TABLA ---
-  // Calculamos los saldos fila por fila justo antes de renderizar para restaurar tu Excel visual
+  // Lógica para calcular Saldo Inicio/Final en la tabla visualmente
   let tempBalanceForTable = selectedLoan ? Number(selectedLoan.principal_amount || selectedLoan.loan_amount) : 0;
   const installmentsWithBalances = loanInstallments.map(inst => {
     const saldoInicio = tempBalanceForTable;
-    const saldoFinal = saldoInicio - Number(inst.principal_portion);
+    // Si la cuota fue pagada, restamos el capital que realmente pagó (incluyendo abonos extra)
+    // Si está pendiente, restamos el capital que se supone que debe pagar
+    const capitalParaRestar = (inst.status === 'PAID' || inst.status === 'LATE') 
+      ? Number(inst.principal_portion) 
+      : Number(inst.principal_portion); 
+      
+    const saldoFinal = saldoInicio - capitalParaRestar;
     tempBalanceForTable = saldoFinal;
     return { ...inst, saldoInicio, saldoFinal: saldoFinal > 0 ? saldoFinal : 0 };
   });
@@ -551,6 +566,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                                 <div className="text-xs text-slate-400 flex flex-col items-center">
                                   <span>Pago: {inst.actual_payment_date}</span>
                                   <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
+                                  {inst.late_fee_charged > 0 && <span className="text-red-400 font-mono">Mora: {formatCurrency(inst.late_fee_charged)}</span>}
                                 </div>
                               )}
                             </td>
