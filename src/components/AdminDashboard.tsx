@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME'
+    extraPaymentType: 'REDUCE_TIME' 
   });
 
   useEffect(() => {
@@ -154,7 +154,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- LÓGICA FINANCIERA PERFECCIONADA ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
@@ -248,8 +247,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
-      console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
-
       const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
       const { error } = await supabase.from('loan_installments').update({
@@ -329,6 +326,16 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   };
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+  // --- CÁLCULO DINÁMICO DE SALDOS PARA LA TABLA ---
+  // Calculamos los saldos fila por fila justo antes de renderizar para restaurar tu Excel visual
+  let tempBalanceForTable = selectedLoan ? Number(selectedLoan.principal_amount || selectedLoan.loan_amount) : 0;
+  const installmentsWithBalances = loanInstallments.map(inst => {
+    const saldoInicio = tempBalanceForTable;
+    const saldoFinal = saldoInicio - Number(inst.principal_portion);
+    tempBalanceForTable = saldoFinal;
+    return { ...inst, saldoInicio, saldoFinal: saldoFinal > 0 ? saldoFinal : 0 };
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
@@ -513,31 +520,39 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
                   <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50">
+                      <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase border-b border-slate-700/50">
                         <tr>
                           <th className="p-3">Nº</th>
                           <th className="p-3">Fecha Vence</th>
-                          <th className="p-3 text-right">Monto Base</th>
+                          <th className="p-3 text-right">Saldo Inicio</th>
+                          <th className="p-3 text-right">Capital</th>
+                          <th className="p-3 text-right">Interés</th>
+                          <th className="p-3 text-right">Vr. Cuota</th>
+                          <th className="p-3 text-right">Saldo Final</th>
                           <th className="p-3 text-center">Estado</th>
                           <th className="p-3 text-center">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
-                        {loanInstallments.map(inst => (
+                        {installmentsWithBalances.map(inst => (
                           <tr key={inst.id} className={`transition-colors ${inst.status === 'PAID_EARLY' ? 'hidden' : 'hover:bg-slate-800/50'}`}>
                             <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
-                            <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
-                            <td className="p-3 font-medium text-slate-200 text-right tabular-nums">{formatCurrency(inst.expected_amount)}</td>
+                            <td className="p-3 text-slate-400 whitespace-nowrap">{inst.expected_payment_date}</td>
+                            <td className="p-3 text-slate-400 text-right tabular-nums">{formatCurrency(inst.saldoInicio)}</td>
+                            <td className="p-3 text-slate-200 text-right tabular-nums">{formatCurrency(inst.principal_portion)}</td>
+                            <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
+                            <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(inst.expected_amount)}</td>
+                            <td className="p-3 text-slate-400 text-right tabular-nums">{formatCurrency(inst.saldoFinal)}</td>
                             <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
-                            <td className="p-3 text-center">
+                            <td className="p-3 text-center min-w-[140px]">
                               {inst.status === 'PENDING' ? (
                                 <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
-                              ) : inst.status !== 'PAID_EARLY' ? (
+                              ) : (
                                 <div className="text-xs text-slate-400 flex flex-col items-center">
-                                  <span>Pagado: {inst.actual_payment_date}</span>
+                                  <span>Pago: {inst.actual_payment_date}</span>
                                   <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
                                 </div>
-                              ) : null}
+                              )}
                             </td>
                           </tr>
                         ))}
