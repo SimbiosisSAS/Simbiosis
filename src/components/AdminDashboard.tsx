@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME'
+    extraPaymentType: 'REDUCE_TIME' 
   });
 
   useEffect(() => {
@@ -87,12 +87,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`);
-    
-    if (confirmDelete) {
+    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial.`)) {
       try {
-        const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
-        if (error) throw error;
+        await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
         alert('Crédito eliminado exitosamente');
         setSelectedLoan(null);
         fetchActiveLoans();
@@ -117,10 +114,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     for (let i = 1; i <= totalDaysLate; i++) {
       const currentLateDay = new Date(expected.getTime());
       currentLateDay.setDate(expected.getDate() + i);
-      const currentMonth = currentLateDay.getMonth() + 1;
-      const currentYear = currentLateDay.getFullYear();
-
-      const rateRecord = usuryRates.find(r => r.period_month === currentMonth && r.period_year === currentYear);
+      const rateRecord = usuryRates.find(r => r.period_month === (currentLateDay.getMonth() + 1) && r.period_year === currentLateDay.getFullYear());
       const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
       penalty += amount * dailyRate;
     }
@@ -154,154 +148,55 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- MATEMÁTICA BANCARIA REESCRITA Y ACORAZADA ---
-  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
-    if (!selectedLoan || !selectedInstallment) return;
-    
-    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
-    if (futureInstallments.length === 0) return;
-
-    // Calcular el Saldo Vivo EXACTO que queda después del pago de hoy
-    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let newBalance = previousPendingPrincipal - excedenteCapital;
-    if (newBalance <= 0) newBalance = 0;
-
-    const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    let currentBalance = newBalance;
-    const updates = [];
-
-    if (strategy === 'REDUCE_QUOTA') {
-      const remainingMonths = futureInstallments.length;
-      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        if (currentBalance <= 0.5) {
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        // El interés siempre es el Saldo Inicial * Tasa
-        const interest = currentBalance * rate;
-        let principal = newFixedQuota - interest;
-
-        // Ajuste en la última cuota para no cobrar centavos extra
-        if (i === futureInstallments.length - 1 || currentBalance < principal) {
-          principal = currentBalance;
-        }
-        
-        updates.push({
-          id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    } else {
-      // ESTRATEGIA: REDUCIR TIEMPO
-      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        if (currentBalance <= 0.5) { 
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        // El interés siempre es el Saldo Inicial * Tasa
-        const interest = currentBalance * rate;
-        let principal = fixedQuota - interest;
-        
-        // Si el saldo es menor que el principal calculado, esta es la última cuota real
-        if (currentBalance < principal) {
-          principal = currentBalance;
-        }
-
-        updates.push({
-          id: inst.id,
-          // La cuota total se ajusta en el último mes
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    }
-
-    for (const update of updates) {
-      await supabase.from('loan_installments').update({
-        expected_amount: update.expected_amount,
-        principal_portion: update.principal_portion,
-        interest_portion: update.interest_portion,
-        status: update.status
-      }).eq('id', update.id);
-    }
-  };
-
+  // --- NUEVA LÓGICA DE PAGO (LLAMANDO AL MOTOR DE SUPABASE) ---
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
     try {
       const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
-      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       
-      const isLate = paymentData.daysLate > 0;
-      const status = isLate ? 'LATE' : 'PAID';
-      
-      const cobroObligatorio = cuotaBase + moraCobrada;
-      const abonoCapitalExtra = pagoReal - cobroObligatorio;
-
-      const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
-
-      const { error } = await supabase.from('loan_installments').update({
-        status: status,
-        actual_payment_date: paymentData.actualDate,
-        actual_amount_paid: pagoReal,
-        late_fee_charged: moraCobrada,
-        principal_portion: nuevoPrincipalPagadoEstaCuota
-      }).eq('id', selectedInstallment.id);
+      // Llamamos a la función maestra que creamos en Supabase
+      const { error } = await supabase.rpc('process_loan_payment', {
+        p_installment_id: selectedInstallment.id,
+        p_actual_amount_paid: pagoReal,
+        p_late_fee_charged: moraCobrada,
+        p_actual_payment_date: paymentData.actualDate,
+        p_strategy: paymentData.extraPaymentType
+      });
 
       if (error) throw error;
 
-      if (abonoCapitalExtra > 10) {
-        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
-      } else {
-        alert('¡Pago registrado con éxito!');
-      }
-
+      alert('¡Pago registrado y procesado exitosamente por el Core Bancario!');
       setShowPaymentModal(false);
+      
+      // Refrescamos la vista
       setLoanInstallments([]);
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
       console.error("Error en pago:", err);
-      alert('Error al registrar pago: ' + err.message);
+      alert('Error crítico de base de datos: ' + err.message);
     }
-  };
-
-  const calculateCurrentBalance = () => {
-    if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const saldoPendiente = loanInstallments
-      .filter(i => i.status === 'PENDING')
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    return saldoPendiente > 0 ? saldoPendiente : 0;
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Cuota Esperada,Capital,Interes,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Capital,Interes,Cuota Esperada,Saldo Final,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
+    
+    let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
     loanInstallments.forEach(row => {
       if (row.status !== 'PAID_EARLY') {
+        const saldoInicio = tempBalanceForExcel;
+        const capitalRestar = Number(row.principal_portion);
+        const saldoFinal = saldoInicio - capitalRestar;
+        tempBalanceForExcel = saldoFinal > 0 ? saldoFinal : 0;
+
         const rowData = [
-          row.installment_number, row.expected_payment_date, row.expected_amount, row.principal_portion,
-          row.interest_portion, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid, row.late_fee_charged
+          row.installment_number, row.expected_payment_date, saldoInicio, row.principal_portion,
+          row.interest_portion, row.expected_amount, tempBalanceForExcel, row.status, 
+          row.actual_payment_date || 'N/A', row.actual_amount_paid, row.late_fee_charged
         ];
         csvContent += rowData.join(",") + "\n";
       }
@@ -337,19 +232,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-  // Lógica para calcular Saldo Inicio/Final en la tabla visualmente
+  // Cálculo Dinámico para la Tabla Visual
   let tempBalanceForTable = selectedLoan ? Number(selectedLoan.principal_amount || selectedLoan.loan_amount) : 0;
   const installmentsWithBalances = loanInstallments.map(inst => {
     const saldoInicio = tempBalanceForTable;
-    // Si la cuota fue pagada, restamos el capital que realmente pagó (incluyendo abonos extra)
-    // Si está pendiente, restamos el capital que se supone que debe pagar
-    const capitalParaRestar = (inst.status === 'PAID' || inst.status === 'LATE') 
-      ? Number(inst.principal_portion) 
-      : Number(inst.principal_portion); 
-      
+    const capitalParaRestar = Number(inst.principal_portion); 
     const saldoFinal = saldoInicio - capitalParaRestar;
-    tempBalanceForTable = saldoFinal;
-    return { ...inst, saldoInicio, saldoFinal: saldoFinal > 0 ? saldoFinal : 0 };
+    tempBalanceForTable = saldoFinal > 0 ? saldoFinal : 0;
+    return { ...inst, saldoInicio, saldoFinal: tempBalanceForTable };
   });
 
   return (
@@ -504,12 +394,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p>
                     <p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.principal_amount || selectedLoan.loan_amount)}</p>
                   </div>
+                  
                   <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
                     <p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p>
                     <p className="text-xl font-bold text-emerald-400 font-mono">
-                      {formatCurrency(calculateCurrentBalance())}
+                      {formatCurrency(installmentsWithBalances.find(i => i.status === 'PENDING')?.saldoInicio || 0)}
                     </p>
                   </div>
+                  
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 flex flex-col justify-center">
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Estado de Cuotas</p>
                     <div className="flex justify-between items-center">
@@ -535,7 +427,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
                   <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                     <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase border-b border-slate-700/50">
+                      <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50">
                         <tr>
                           <th className="p-3">Nº</th>
                           <th className="p-3">Fecha Vence</th>
