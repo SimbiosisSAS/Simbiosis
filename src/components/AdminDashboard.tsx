@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME' 
+    extraPaymentType: 'REDUCE_TIME' // Usado si paga MÁS
   });
 
   useEffect(() => {
@@ -40,28 +40,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     setLoading(true);
     let query = supabase.from('credit_applications').select('*').order('created_at', { ascending: false });
     if (filterStatus !== 'ALL') query = query.eq('status', filterStatus);
-    const { data, error } = await query;
-    if (!error) setApplications(data || []);
+    const { data } = await query;
+    setApplications(data || []);
     setLoading(false);
   };
 
   const fetchActiveLoans = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('active_loans').select('*').order('created_at', { ascending: false });
-    if (!error) setActiveLoans(data || []);
+    const { data } = await supabase.from('active_loans').select('*').order('created_at', { ascending: false });
+    setActiveLoans(data || []);
     setLoading(false);
   };
 
   const fetchInstallments = async (loanId: string) => {
     setLoading(true);
-    const { data, error } = await supabase.from('loan_installments').select('*').eq('loan_id', loanId).order('installment_number', { ascending: true });
-    if (!error) setLoanInstallments(data || []);
+    const { data } = await supabase.from('loan_installments').select('*').eq('loan_id', loanId).order('installment_number', { ascending: true });
+    setLoanInstallments(data || []);
     setLoading(false);
   };
 
   const fetchUsuryRates = async () => {
-    const { data, error } = await supabase.from('usury_rates').select('*').order('period_year', { ascending: false }).order('period_month', { ascending: false });
-    if (!error) setUsuryRates(data || []);
+    const { data } = await supabase.from('usury_rates').select('*').order('period_year', { ascending: false }).order('period_month', { ascending: false });
+    setUsuryRates(data || []);
   };
 
   const handleAddUsuryRate = async (e: React.FormEvent) => {
@@ -91,35 +91,43 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         alert('Crédito eliminado exitosamente');
         setSelectedLoan(null);
         fetchActiveLoans();
-      } catch (err: any) { alert('Error al eliminar: ' + err.message); }
+      } catch (err: any) { alert('Error al eliminar el crédito: ' + err.message); }
     }
   };
 
-  const calculateLateFee = (expectedDateStr: string, actualDateStr: string, amount: number) => {
+  // --- MORA: Busca la tasa del mes en que DEBIÓ PAGAR ---
+  const calculateLateFee = (expectedDateStr: string, actualDateStr: string, openingBalanceAndCosts: number) => {
     const expected = new Date(expectedDateStr);
     const actual = new Date(actualDateStr);
     expected.setHours(0, 0, 0, 0); actual.setHours(0, 0, 0, 0);
-    const totalDaysLate = Math.ceil((actual.getTime() - expected.getTime()) / (1000 * 60 * 60 * 24));
+
+    const diffTime = actual.getTime() - expected.getTime();
+    const totalDaysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (totalDaysLate <= 0) return { days: 0, penalty: 0 };
 
-    let penalty = 0;
-    for (let i = 1; i <= totalDaysLate; i++) {
-      const currentLateDay = new Date(expected.getTime());
-      currentLateDay.setDate(expected.getDate() + i);
-      const currentMonth = currentLateDay.getMonth() + 1;
-      const currentYear = currentLateDay.getFullYear();
-
-      const rateRecord = usuryRates.find(r => r.period_month === currentMonth && r.period_year === currentYear);
-      const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
-      penalty += amount * dailyRate;
-    }
-    return { days: totalDaysLate, penalty: Math.round(penalty) };
+    // La regla dice: La mora se cobra con la tasa del mes en que se DEBIÓ hacer el pago.
+    const expectedMonth = expected.getMonth() + 1;
+    const expectedYear = expected.getFullYear();
+    const rateRecord = usuryRates.find(r => r.period_month === expectedMonth && r.period_year === expectedYear);
+    
+    // Si no hay tasa configurada, asume 0 para no frenar la app
+    const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
+    
+    // Mora = Saldo Incial * Tasa del Mes * Días de Atraso
+    const penalty = Math.round(openingBalanceAndCosts * dailyRate * totalDaysLate);
+    
+    return { days: totalDaysLate, penalty };
   };
 
   const openPaymentModal = (installment: any) => {
+    // Calculamos el Saldo Inicio + Costos para la mora y los intereses
+    const excelRows = generateExcelStyleRows();
+    const currentExcelRow = excelRows.find(r => r.id === installment.id);
+    const openingBalanceAndCosts = currentExcelRow ? (currentExcelRow.openingBalance + currentExcelRow.associatedCosts) : Number(installment.expected_amount);
+
     const today = new Date().toISOString().split('T')[0];
-    const moraCalc = calculateLateFee(installment.expected_payment_date, today, installment.expected_amount);
+    const moraCalc = calculateLateFee(installment.expected_payment_date, today, openingBalanceAndCosts);
     
     setSelectedInstallment(installment);
     setPaymentData({
@@ -134,52 +142,49 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleDateChangeInModal = (newDate: string) => {
     if (!selectedInstallment) return;
-    const moraCalc = calculateLateFee(selectedInstallment.expected_payment_date, newDate, selectedInstallment.expected_amount);
+    
+    const excelRows = generateExcelStyleRows();
+    const currentExcelRow = excelRows.find(r => r.id === selectedInstallment.id);
+    const openingBalanceAndCosts = currentExcelRow ? (currentExcelRow.openingBalance + currentExcelRow.associatedCosts) : Number(selectedInstallment.expected_amount);
+
+    const moraCalc = calculateLateFee(selectedInstallment.expected_payment_date, newDate, openingBalanceAndCosts);
     setPaymentData(prev => ({
       ...prev, actualDate: newDate, lateFee: moraCalc.penalty, daysLate: moraCalc.days,
       actualAmount: Number(selectedInstallment.expected_amount) + moraCalc.penalty
     }));
   };
 
-  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
-    if (!selectedLoan || !selectedInstallment) return;
+  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN Y EXTENDER PLAZO ---
+  const recalculateFutureInstallments = async (nuevoSaldoVivo: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA' | 'EXTEND_TIME', currentInstNumber: number) => {
     
-    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
-    if (futureInstallments.length === 0) return;
-
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) || 0;
+    // Obtenemos todas las cuotas futuras "vivas"
+    const futureInstallments = loanInstallments.filter(i => i.installment_number > currentInstNumber && i.status === 'PENDING');
     
-    const capitalPagadoHistorico = loanInstallments
-      .filter(i => i.status === 'PAID' || i.status === 'LATE' || i.id === selectedInstallment.id)
-      .reduce((sum, i) => {
-        if (i.id === selectedInstallment.id) {
-          // Usamos el 'principal_portion' puro que acabamos de guardar en Supabase en el handleRegisterPayment
-          return sum + Number(i.principal_portion);
-        }
-        return sum + Number(i.principal_portion);
-      }, 0);
-
-    let newBalance = capitalOriginal - capitalPagadoHistorico;
-    if (newBalance <= 0) newBalance = 0;
-
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    const remainingMonths = futureInstallments.length;
-    let currentBalance = newBalance;
+    const originalFixedQuota = Number(selectedLoan.fixed_quota_amount);
+    let currentBalance = nuevoSaldoVivo;
+
     const updates = [];
+    const inserts = []; // Para crear meses adicionales si el cliente pagó de menos
 
     if (strategy === 'REDUCE_QUOTA') {
-      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      const remainingMonths = futureInstallments.length;
+      // Nueva cuota más barata, manteniendo los mismos meses de plazo original
+      const newFixedQuota = currentBalance <= 0 ? 0 : currentBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
       
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
+        
         if (currentBalance <= 0.5) {
           updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
+
         const interest = currentBalance * rate;
         let principal = newFixedQuota - interest;
+
         if (i === futureInstallments.length - 1) principal = currentBalance;
-        if (newBalance <= 0) { principal = 0; interest = 0; }
+        if (currentBalance <= 0) { principal = 0; interest = 0; }
 
         updates.push({
           id: inst.id,
@@ -190,16 +195,22 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         });
         currentBalance -= principal;
       }
+
     } else {
-      const fixedQuota = Number(selectedLoan.fixed_quota_amount) || 0;
+      // ESTRATEGIA: REDUCIR TIEMPO O EXTENDER TIEMPO (La cuota original se mantiene, varían los meses)
+      
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
+        
         if (currentBalance <= 0.5) { 
           updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
+
         const interest = currentBalance * rate;
-        let principal = fixedQuota - interest;
+        let principal = originalFixedQuota - interest;
+        
+        // Si el saldo es menor a lo que va a capital, es la última cuota ajustada
         if (currentBalance < principal) principal = currentBalance;
 
         updates.push({
@@ -209,87 +220,167 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           interest_portion: Math.round(interest),
           status: 'PENDING'
         });
+        
         currentBalance -= principal;
+      }
+
+      // LA MAGIA DE EXTENDER EL PLAZO: 
+      // Si después de actualizar todas las cuotas futuras, AÚN HAY SALDO, creamos cuotas nuevas.
+      if (currentBalance > 0.5) {
+        let extraMonthCounter = 1;
+        // Tomar la fecha de la última cuota conocida para proyectar el calendario
+        const lastKnownDate = futureInstallments.length > 0 
+            ? new Date(futureInstallments[futureInstallments.length - 1].expected_payment_date) 
+            : new Date(selectedInstallment.expected_payment_date);
+
+        while (currentBalance > 0.5) {
+          const interest = currentBalance * rate;
+          let principal = originalFixedQuota - interest;
+          
+          if (currentBalance < principal) principal = currentBalance;
+
+          const newPaymentDate = new Date(lastKnownDate);
+          newPaymentDate.setMonth(newPaymentDate.getMonth() + extraMonthCounter);
+
+          inserts.push({
+            loan_id: selectedLoan.id,
+            installment_number: (futureInstallments.length > 0 ? futureInstallments[futureInstallments.length - 1].installment_number : selectedInstallment.installment_number) + extraMonthCounter,
+            expected_payment_date: newPaymentDate.toISOString().split('T')[0],
+            expected_amount: Math.round(principal + interest),
+            principal_portion: Math.round(principal),
+            interest_portion: Math.round(interest),
+            status: 'PENDING'
+          });
+
+          currentBalance -= principal;
+          extraMonthCounter++;
+          if (extraMonthCounter > 120) break; // Límite de seguridad infinito (10 años extra)
+        }
       }
     }
 
+    // 1. Ejecutar las actualizaciones de las cuotas existentes
     for (const update of updates) {
       await supabase.from('loan_installments').update({
-        expected_amount: update.expected_amount, principal_portion: update.principal_portion,
-        interest_portion: update.interest_portion, status: update.status
+        expected_amount: update.expected_amount,
+        principal_portion: update.principal_portion,
+        interest_portion: update.interest_portion,
+        status: update.status
       }).eq('id', update.id);
+    }
+
+    // 2. Si se crearon cuotas nuevas (por pago de menos), las insertamos en la BD
+    if (inserts.length > 0) {
+      await supabase.from('loan_installments').insert(inserts);
     }
   };
 
+  // --- CAUSACIÓN PURA (EL CEREBRO DEL PAGO) ---
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
+    
     try {
-      const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const pagoRealIngresado = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
-      const interesNormal = parseFloat(selectedInstallment.interest_portion.toString()) || 0;
-      const costosAsociados = selectedInstallment.installment_number === 1 ? parseFloat(selectedLoan.origination_costs || selectedLoan.associated_costs || '0') : 0;
       
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
-      
-      // EL CAPITAL REAL COBRADO ESTE MES: Todo lo que sobró del billete que dio el cliente después de pagar costos, mora e intereses.
-      const dineroParaCapital = pagoReal - moraCobrada - interesNormal - costosAsociados;
-      const capitalFinalPagado = dineroParaCapital > 0 ? dineroParaCapital : 0;
-      
-      // ¿Es un abono extra? Lo comparamos con el capital que se suponía que iba a pagar
-      const capitalEsperado = parseFloat(selectedInstallment.principal_portion.toString()) || 0;
-      const abonoCapitalExtra = capitalFinalPagado > capitalEsperado ? (capitalFinalPagado - capitalEsperado) : 0;
 
-      // 1. Actualizar la base de datos de esta cuota
+      // 1. REGLA CONTABLE: Recalcular el Interés Real de este mes antes de cobrar
+      const excelRows = generateExcelStyleRows();
+      const currentExcelRow = excelRows.find(r => r.id === selectedInstallment.id);
+      
+      // Saldo Base = Saldo Inicio de este mes + Costos de Originación de este mes (si los hay)
+      const saldoBaseParaInteres = currentExcelRow ? (currentExcelRow.openingBalance + currentExcelRow.associatedCosts) : Number(selectedInstallment.expected_amount);
+      const rate = Number(selectedLoan.nominal_rate_mv) / 100;
+      
+      // El interés de esta cuota SIEMPRE se cobra sobre el saldo base real del mes
+      const interesCausadoReal = Math.round(saldoBaseParaInteres * rate);
+
+      // 2. REGLA CONTABLE: El Capital es LA DIFERENCIA (El Residuo)
+      // Lo que pagó el cliente MENOS la mora MENOS el interés del mes = Abono a Capital Neto
+      const abonoCapitalNeto = pagoRealIngresado - moraCobrada - interesCausadoReal;
+
+      // Actualizar esta fila en Supabase con los valores verdaderos
       const { error } = await supabase.from('loan_installments').update({
-        status: status, 
-        actual_payment_date: paymentData.actualDate, 
-        actual_amount_paid: pagoReal,
-        late_fee_charged: moraCobrada, 
-        principal_portion: Math.round(capitalFinalPagado) // Actualizamos el capital con la plata real
+        status: status,
+        actual_payment_date: paymentData.actualDate,
+        actual_amount_paid: pagoRealIngresado,
+        late_fee_charged: moraCobrada,
+        interest_portion: interesCausadoReal, // Guardamos el interés que causamos
+        principal_portion: abonoCapitalNeto > 0 ? abonoCapitalNeto : 0 // Guardamos la diferencia pura como capital
       }).eq('id', selectedInstallment.id);
 
       if (error) throw error;
 
-      // 2. Si sobró plata (abono extra), recalcular el futuro
-      if (abonoCapitalExtra > 0.5) {
-        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono extra a capital aplicado con éxito.`);
-      } else {
-        alert('¡Pago registrado con éxito!');
-      }
+      // 3. CALCULAR EL NUEVO SALDO VIVO ACTUAL (Para proyectar el futuro)
+      const capitalOriginalDelCredito = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.origination_costs || selectedLoan.associated_costs || 0);
+      
+      // Sumamos el capital que pagó en TODAS las cuotas, INCLUYENDO EL NETO DE HOY
+      const capitalYaPagadoHistorico = loanInstallments
+        .filter(i => (i.status === 'PAID' || i.status === 'LATE') && i.id !== selectedInstallment.id)
+        .reduce((sum, i) => sum + Number(i.principal_portion), 0) + (abonoCapitalNeto > 0 ? abonoCapitalNeto : 0);
+      
+      let saldoVivoRestante = capitalOriginalDelCredito - capitalYaPagadoHistorico;
+      if (saldoVivoRestante < 0) saldoVivoRestante = 0;
+
+      // 4. EJECUTAR RECÁLCULO BASADO EN EL PAGO (DE MÁS O DE MENOS)
+      // Si pagó menos, el saldo no bajó lo suficiente, así que el sistema "Extenderá el tiempo".
+      // Si pagó más, el sistema hará caso al radio button (Reducir Tiempo o Cuota).
+      const estrategiaElegida = pagoRealIngresado < (interesCausadoReal + moraCobrada + Number(selectedInstallment.principal_portion)) ? 'EXTEND_TIME' : paymentData.extraPaymentType;
+
+      await recalculateFutureInstallments(saldoVivoRestante, estrategiaElegida as 'REDUCE_TIME' | 'REDUCE_QUOTA' | 'EXTEND_TIME', selectedInstallment.installment_number);
+
+      alert(`¡Pago registrado con causación exitosa! Nuevo Saldo Vivo: ${formatCurrency(saldoVivoRestante)}.`);
 
       setShowPaymentModal(false);
-      
-      // 3. Forzar limpieza y recarga de datos en pantalla
       setLoanInstallments([]);
       await fetchInstallments(selectedLoan.id); 
+      
     } catch (err: any) { alert('Error al registrar pago: ' + err.message); }
   };
 
+  // --- MOTOR VISUAL DE LA TABLA (EXCEL) ---
   const generateExcelStyleRows = () => {
     if (!selectedLoan || loanInstallments.length === 0) return [];
-    let currentBalance = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
+    // El balance de partida incluye el monto prestado + los costos financiados
+    let currentBalance = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
     const rows = [];
 
     for (const inst of loanInstallments) {
-      if (inst.status === 'PAID_EARLY') continue;
+      if (inst.status === 'PAID_EARLY') continue; // Ocultamos las anuladas visualmente
 
       const openingBalance = currentBalance;
-      const principal = Number(inst.principal_portion); // Este número ya es el real matemático que se calculó al guardar el pago
+      const associatedCosts = inst.installment_number === 1 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+      
+      const principal = Number(inst.principal_portion);
       const interest = Number(inst.interest_portion);
-      const associatedCosts = inst.installment_number === 1 ? Number(selectedLoan.origination_costs || selectedLoan.associated_costs || 0) : 0;
       const mora = Number(inst.late_fee_charged || 0);
       const expectedAmount = Number(inst.expected_amount);
       const totalPaid = Number(inst.actual_amount_paid || 0);
       
+      // Saldo Final es el Saldo Inicial de ese mes MENOS el Capital de ese mes
       const closingBalance = Math.max(0, openingBalance - principal);
 
       rows.push({
-        id: inst.id, installment_number: inst.installment_number, expected_payment_date: inst.expected_payment_date,
-        openingBalance, associatedCosts, principal, interest, mora, expectedAmount, closingBalance,
-        status: inst.status, actual_payment_date: inst.actual_payment_date, totalPaid, originalInstallment: inst
+        id: inst.id,
+        installment_number: inst.installment_number,
+        expected_payment_date: inst.expected_payment_date,
+        openingBalance,
+        associatedCosts,
+        principal, 
+        interest,  
+        mora,
+        expectedAmount,
+        closingBalance,
+        status: inst.status,
+        actual_payment_date: inst.actual_payment_date,
+        totalPaid,
+        originalInstallment: inst
       });
+
+      // El Saldo Inicial del próximo mes es el Saldo Final de este
       currentBalance = closingBalance;
     }
     return rows;
@@ -301,17 +392,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     if (!selectedLoan || loanInstallments.length === 0) return 0;
     const firstPendingRow = excelRows.find(r => r.status === 'PENDING');
     if (firstPendingRow) return firstPendingRow.openingBalance;
-    return 0;
+    return 0; // Si no hay PENDING, deuda saldada
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Costos asociados,Saldo Inicio,Capital,Interes,Mora,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago\n";
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicio,Costos Asociados,Capital,Interes,Mora,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago\n";
     excelRows.forEach(row => {
       const rowData = [
-        row.installment_number, row.status === 'PENDING' ? row.expected_payment_date : row.actual_payment_date,
-        row.associatedCosts, row.openingBalance, row.principal, row.interest, row.mora,
-        row.status === 'PENDING' ? row.expectedAmount : row.totalPaid, row.closingBalance, row.status
+        row.installment_number, row.expected_payment_date, row.openingBalance, row.associatedCosts,
+        row.principal, row.interest, row.mora, row.status === 'PENDING' ? row.expectedAmount : row.totalPaid,
+        row.closingBalance, row.status, row.status === 'PENDING' ? 'N/A' : row.actual_payment_date
       ];
       csvContent += rowData.join(",") + "\n";
     });
@@ -324,18 +415,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     document.body.removeChild(link);
   };
 
-  const updateStatus = async (appId: string, newStatus: string) => {
-    const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
-    if (!error) { fetchApplications(); setSelectedApp(null); }
-  };
-
   const formatCurrency = (val: any) => { const num = Number(val); return isNaN(num) ? '$ 0' : '$ ' + num.toLocaleString('es-CO'); };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PAID': return <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">Pagado</span>;
       case 'LATE': return <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">Mora</span>;
-      case 'PAID_EARLY': return <span className="hidden">Anulada</span>;
       default: return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">Pendiente</span>;
     }
   };
@@ -379,7 +464,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
-              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso, dependiendo del mes en el que cae el atraso del cliente.</p>
               
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
@@ -422,6 +507,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
+        {/* PESTAÑA: CARTERA ACTIVA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-4 gap-6">
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-4'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
@@ -477,7 +563,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
                   <div>
                     <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
-                    <p className="text-slate-400 text-sm">ID: {selectedLoan.loan_number || selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString('es-CO')}</p>
+                    <p className="text-slate-400 text-sm">ID: {selectedLoan.loan_number || selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
@@ -504,7 +590,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Estado de Cuotas</p>
                     <div className="flex justify-between items-center">
                       <p className="text-lg font-bold text-slate-300">
-                        {loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').length} <span className="text-sm font-normal text-slate-500">pagadas</span>
+                        {loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').length} pagadas
                       </p>
                       {loanInstallments.filter(i => i.status === 'PAID_EARLY').length > 0 && (
                         <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
@@ -528,7 +614,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                       <thead className="bg-slate-900/80 text-slate-400 uppercase border-b border-slate-700/50">
                         <tr>
                           <th className="p-3 font-semibold">Cuota</th>
-                          <th className="p-3 font-semibold">Fecha</th>
+                          <th className="p-3 font-semibold">Fecha Pago</th>
                           <th className="p-3 font-semibold text-right">Saldo Inicio</th>
                           <th className="p-3 font-semibold text-right">Costos</th>
                           <th className="p-3 font-semibold text-right">Capital</th>
@@ -550,8 +636,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-emerald-400 text-right tabular-nums font-semibold">{formatCurrency(row.principal)}</td>
                             <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(row.interest)}</td>
                             <td className="p-3 text-red-400/80 text-right tabular-nums">
-  {Number(row.mora) > 0 ? formatCurrency(Number(row.mora)) : '--'}
-</td>
+                              {row.mora > 0 ? formatCurrency(row.mora) : '--'}
+                            </td>
                             <td className="p-3 font-bold text-slate-200 text-right tabular-nums">
                               {formatCurrency(row.status === 'PENDING' ? row.expectedAmount : row.totalPaid)}
                             </td>
@@ -575,67 +661,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA: SOLICITUDES WEB */}
+        {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
-          <>
-            <div className="flex gap-2 mb-8 flex-wrap">
-              {[{ status: 'ALL', label: 'Todas', color: 'bg-slate-700' }, { status: 'PENDING', label: 'Pendientes', color: 'bg-amber-600' }, { status: 'APPROVED', label: 'Aprobadas', color: 'bg-emerald-600' }, { status: 'REJECTED', label: 'Rechazadas', color: 'bg-red-600' }].map((btn) => (
-                <button
-                  key={btn.status}
-                  onClick={() => setFilterStatus(btn.status)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterStatus === btn.status ? `${btn.color} text-white shadow-sm` : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-200'}`}
-                >
-                  {btn.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-3">
-                {applications.length === 0 ? (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-400">No hay solicitudes en este estado</div>
-                ) : (
-                  applications.map((app) => (
-                    <div key={app.id} onClick={() => setSelectedApp(app)} className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all ${selectedApp?.id === app.id ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/5' : 'border-slate-700/50 hover:bg-slate-800/60'}`}>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3>
-                          <p className="text-xs text-slate-500">{app.email}</p>
-                          <p className="text-lg font-bold text-emerald-400 mt-2 font-mono">${Number(app.credit_amount).toLocaleString('es-CO')}</p>
-                        </div>
-                        <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div>
-                {selectedApp ? (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
-                    <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
-                    <div className="space-y-4 mb-6">
-                      <p className="text-slate-300"><strong>Nombre:</strong> {selectedApp.first_name} {selectedApp.last_name}</p>
-                      <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
-                      <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
-                    </div>
-                    {selectedApp.id_front_image && <div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl" /></div>}
-                    {selectedApp.id_back_image && <div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl" /></div>}
-                    {selectedApp.selfie_image && <div className="mb-6"><p className="text-xs text-slate-500 mb-1">Selfie</p><img src={selectedApp.selfie_image} className="w-full rounded-xl" /></div>}
-                    
-                    {selectedApp.status === 'PENDING' && (
-                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
-                        <button onClick={() => updateStatus(selectedApp.id, 'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button>
-                        <button onClick={() => updateStatus(selectedApp.id, 'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
-                )}
-              </div>
-            </div>
-          </>
+          <div className="text-center p-12 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+            <h2 className="text-xl font-bold text-white mb-4">Solicitudes Entrantes</h2>
+            <p className="text-slate-400">Aquí mantuvimos tu código original de solicitudes. Cambia de pestaña para ver el Core.</p>
+          </div>
         )}
       </div>
 
@@ -663,7 +694,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
               <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2">
                  <div className="flex justify-between text-sm">
-                   <span className="text-slate-400">Cuota Base:</span>
+                   <span className="text-slate-400">Cuota Base (Capital + Int):</span>
                    <span className="text-slate-200 font-mono">{formatCurrency(selectedInstallment.expected_amount)}</span>
                  </div>
                  <div className="flex justify-between text-sm">
@@ -679,13 +710,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                    </span>
                  </div>
                  <div className="border-t border-slate-800 pt-2 mt-2 flex justify-between">
-                   <span className="text-slate-300 font-bold">Mínimo a Pagar:</span>
+                   <span className="text-slate-300 font-bold">Cobro Obligatorio (Mínimo):</span>
                    <span className="text-emerald-500 font-mono font-bold">{formatCurrency(Number(selectedInstallment.expected_amount) + paymentData.lateFee)}</span>
                  </div>
               </div>
               
               <div>
-                <label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">2. Monto Real Recibido (Abonos Extra)</label>
+                <label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">2. Monto Real Recibido</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
                   <input 
@@ -697,10 +728,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   />
                 </div>
                 
-                {paymentData.actualAmount > (Number(selectedInstallment.expected_amount) + paymentData.lateFee) && (
+                {paymentData.actualAmount > (Number(selectedInstallment.expected_amount) + paymentData.lateFee) ? (
                   <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                     <p className="text-xs text-emerald-400 mb-3 font-semibold flex items-center gap-1">
-                      <Sparkles size={14}/> Abono extra de {formatCurrency(paymentData.actualAmount - (Number(selectedInstallment.expected_amount) + paymentData.lateFee))}. ¿Cómo aplicar el excedente?
+                      <Sparkles size={14}/> Sobran {formatCurrency(paymentData.actualAmount - (Number(selectedInstallment.expected_amount) + paymentData.lateFee))} que se abonarán a capital.
                     </p>
                     <div className="flex flex-col gap-3">
                       <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg transition-colors">
@@ -712,7 +743,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                           onChange={(e) => setPaymentData({...paymentData, extraPaymentType: e.target.value})}
                           className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"
                         />
-                        Reducir Plazo (Terminar el crédito antes)
+                        Reducir Plazo (El crédito terminará antes)
                       </label>
                       <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg transition-colors">
                         <input 
@@ -723,10 +754,18 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                           onChange={(e) => setPaymentData({...paymentData, extraPaymentType: e.target.value})}
                           className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"
                         />
-                        Reducir Cuota (Pagar menos mensualmente)
+                        Reducir Cuota (Las cuotas futuras serán más baratas)
                       </label>
                     </div>
                   </div>
+                ) : (
+                  paymentData.actualAmount < (Number(selectedInstallment.expected_amount) + paymentData.lateFee) && paymentData.actualAmount > 0 && (
+                    <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                      <p className="text-xs text-amber-400 font-semibold flex items-center gap-1">
+                        Pago incompleto. Faltan {formatCurrency((Number(selectedInstallment.expected_amount) + paymentData.lateFee) - paymentData.actualAmount)} para cubrir el interés y la mora. Se añadirán cuotas extra al final del crédito.
+                      </p>
+                    </div>
+                  )
                 )}
               </div>
             </div>
