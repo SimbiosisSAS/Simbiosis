@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 
-type AdminTab = 'solicitudes' | 'simulador';
+type AdminTab = 'solicitudes' | 'cartera' | 'simulador';
 
 export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) {
   const [activeTab, setActiveTab] = useState<AdminTab>('solicitudes');
   const [applications, setApplications] = useState<CreditApplication[]>([]);
+  const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -16,6 +17,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   useEffect(() => {
     if (activeTab === 'solicitudes') {
       fetchApplications();
+    } else if (activeTab === 'cartera') {
+      fetchActiveLoans();
     }
   }, [filterStatus, activeTab]);
 
@@ -31,37 +34,38 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
 
     const { data, error } = await query;
+    if (!error) setApplications(data || []);
+    setLoading(false);
+  };
 
-    if (error) {
-      console.error('Error fetching applications:', error);
-    } else {
-      setApplications(data || []);
-    }
+  const fetchActiveLoans = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('active_loans')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error) setActiveLoans(data || []);
     setLoading(false);
   };
 
   const updateStatus = async (appId: string, newStatus: string) => {
     const { error } = await supabase
       .from('credit_applications')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('id', appId);
 
     if (!error) {
       fetchApplications();
-      if (selectedApp?.id === appId) {
-        setSelectedApp(null);
-      }
+      setSelectedApp(null);
     }
   };
 
   const creditTypeLabels: Record<string, string> = {
-    ENTREPRENEURSHIP: 'Credito para Emprendedores',
-    REAL_ESTATE: 'Credito Inmobiliario',
-    FREE_INVESTMENT: 'Credito de Libre Inversion',
-    MICROCREDIT: 'Microcredito'
+    ENTREPRENEURSHIP: 'Crédito para Emprendedores',
+    REAL_ESTATE: 'Crédito Inmobiliario',
+    FREE_INVESTMENT: 'Crédito de Libre Inversión',
+    MICROCREDIT: 'Microcrédito'
   };
 
   const getStatusConfig = (status: string) => {
@@ -86,16 +90,16 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const tabs = [
     { id: 'solicitudes' as AdminTab, label: 'Solicitudes Web', icon: FileText },
-    { id: 'simulador' as AdminTab, label: 'Simulador de Credito', icon: Calculator },
+    { id: 'cartera' as AdminTab, label: 'Cartera Activa', icon: Wallet },
+    { id: 'simulador' as AdminTab, label: 'Simulador de Crédito', icon: Calculator },
   ];
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Top Navigation */}
       <nav className="bg-slate-900/80 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-9 h-9 bg-gradient-to-br from-navy-700 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/10">
+            <div className="w-9 h-9 bg-gradient-to-br from-navy-700 to-emerald-500 rounded-xl flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -104,7 +108,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             </div>
           </div>
 
-          {/* Tabs */}
           <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -112,7 +115,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activeTab === tab.id
                       ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border border-transparent'
@@ -125,26 +128,89 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             })}
           </div>
 
-          {/* Logout */}
           {onLogout && (
             <button
               onClick={onLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all duration-200"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
             >
               <LogOut className="w-4 h-4" />
-              Cerrar Sesion
+              Cerrar Sesión
             </button>
           )}
         </div>
       </nav>
 
-      {/* Content */}
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-        {activeTab === 'simulador' ? (
-          <LoanOriginationEngine />
-        ) : (
+        
+        {/* PESTAÑA: SIMULADOR */}
+        {activeTab === 'simulador' && <LoanOriginationEngine />}
+
+        {/* PESTAÑA: CARTERA ACTIVA */}
+        {activeTab === 'cartera' && (
+          <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
+             <div className="p-6 border-b border-slate-700/50 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">Créditos Otorgados (Cartera Activa)</h2>
+                <p className="text-sm text-slate-400">Listado de préstamos desembolsados y en curso.</p>
+              </div>
+              <div className="flex gap-4">
+                <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 min-w-[200px]">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Colocado</p>
+                  <p className="text-xl font-bold text-emerald-400 font-mono tabular-nums">
+                    ${activeLoans.reduce((sum, loan) => sum + Number(loan.principal_amount), 0).toLocaleString('es-CO')}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {loading ? (
+              <div className="p-12 text-center text-slate-400">Cargando cartera...</div>
+            ) : activeLoans.length === 0 ? (
+               <div className="p-12 text-center text-slate-500">Aún no hay créditos activados en la cartera.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50">
+                    <tr>
+                      <th className="p-4 font-semibold">Fecha Desembolso</th>
+                      <th className="p-4 font-semibold">Cliente</th>
+                      <th className="p-4 font-semibold">Identificación</th>
+                      <th className="p-4 font-semibold text-right">Monto Principal</th>
+                      <th className="p-4 font-semibold text-right">Cuota Fija (Mensual)</th>
+                      <th className="p-4 font-semibold text-center">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {activeLoans.map(loan => (
+                      <tr key={loan.id} className="hover:bg-slate-700/20 transition-colors">
+                        <td className="p-4 text-sm text-slate-300">
+                          {new Date(loan.disbursement_date).toLocaleDateString('es-CO')}
+                        </td>
+                        <td className="p-4 text-sm font-bold text-slate-200">{loan.client_name}</td>
+                        <td className="p-4 text-sm text-slate-400 font-mono">{loan.client_id_number}</td>
+                        <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">
+                          ${Number(loan.principal_amount).toLocaleString('es-CO')}
+                        </td>
+                        <td className="p-4 text-sm font-medium text-slate-300 text-right tabular-nums">
+                          ${Number(loan.monthly_payment).toLocaleString('es-CO')}
+                        </td>
+                        <td className="p-4 text-center">
+                          <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded-md text-xs font-semibold border border-emerald-500/20">
+                            {loan.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* PESTAÑA: SOLICITUDES WEB (Tu código original intacto) */}
+        {activeTab === 'solicitudes' && (
           <>
-            {/* Filter Buttons */}
             <div className="flex gap-2 mb-8 flex-wrap">
               {filterButtons.map((btn) => (
                 <button
@@ -165,7 +231,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               </div>
             </div>
 
-            {/* Applications Grid */}
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
                 {loading ? (
@@ -217,12 +282,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                 )}
               </div>
 
-              {/* Detail Panel */}
               <div>
                 {selectedApp ? (
                   <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
                     <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
-
                     <div className="space-y-4 mb-6">
                       <div>
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Solicitante</p>
@@ -260,33 +323,19 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     {selectedApp.id_front_image && (
                       <div className="mb-4">
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cedula - Frontal</p>
-                        <img
-                          src={selectedApp.id_front_image}
-                          alt="ID Front"
-                          className="w-full rounded-xl border border-slate-700/50"
-                        />
+                        <img src={selectedApp.id_front_image} alt="ID Front" className="w-full rounded-xl border border-slate-700/50" />
                       </div>
                     )}
-
                     {selectedApp.id_back_image && (
                       <div className="mb-4">
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cedula - Reverso</p>
-                        <img
-                          src={selectedApp.id_back_image}
-                          alt="ID Back"
-                          className="w-full rounded-xl border border-slate-700/50"
-                        />
+                        <img src={selectedApp.id_back_image} alt="ID Back" className="w-full rounded-xl border border-slate-700/50" />
                       </div>
                     )}
-
                     {selectedApp.selfie_image && (
                       <div className="mb-6">
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Foto de Rostro</p>
-                        <img
-                          src={selectedApp.selfie_image}
-                          alt="Selfie"
-                          className="w-full rounded-xl border border-slate-700/50"
-                        />
+                        <img src={selectedApp.selfie_image} alt="Selfie" className="w-full rounded-xl border border-slate-700/50" />
                       </div>
                     )}
 
@@ -296,15 +345,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                           onClick={() => updateStatus(selectedApp.id, 'APPROVED')}
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
                         >
-                          <CheckCircle className="w-4 h-4" />
-                          Aprobar
+                          <CheckCircle className="w-4 h-4" /> Aprobar
                         </button>
                         <button
                           onClick={() => updateStatus(selectedApp.id, 'REJECTED')}
                           className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm"
                         >
-                          <XCircle className="w-4 h-4" />
-                          Rechazar
+                          <XCircle className="w-4 h-4" /> Rechazar
                         </button>
                       </div>
                     )}
