@@ -35,7 +35,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   useEffect(() => {
     if (activeTab === 'solicitudes') fetchApplications();
-    else if (activeTab === 'cartera') { fetchActiveLoans(); fetchUsuryRates(); setSelectedLoan(null); }
+    else if (activeTab === 'cartera') { fetchActiveLoans(); setSelectedLoan(null); }
     else if (activeTab === 'configuracion') fetchUsuryRates();
   }, [filterStatus, activeTab]);
 
@@ -159,12 +159,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- LÓGICA FINANCIERA: RECALCULAR AMORTIZACIÓN (ABONOS A CAPITAL) ---
+  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
+    
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
+    // Calcular el nuevo saldo vivo después del abono extra
     let newBalance = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0) - excedenteCapital;
     if (newBalance <= 0) newBalance = 0;
 
@@ -172,8 +174,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const remainingMonths = futureInstallments.length;
     let currentBalance = newBalance;
 
+    const updates = [];
+
     if (strategy === 'REDUCE_QUOTA') {
       const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
         const interest = currentBalance * rate;
@@ -182,36 +187,59 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         if (i === futureInstallments.length - 1) principal = currentBalance;
         if (newBalance <= 0) { principal = 0; interest = 0; }
 
-        await supabase.from('loan_installments').update({
+        updates.push({
+          id: inst.id,
           expected_amount: newBalance <= 0 ? 0 : Math.round(newFixedQuota),
           principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest)
-        }).eq('id', inst.id);
+          interest_portion: Math.round(interest),
+          status: newBalance <= 0 ? 'PAID_EARLY' : 'PENDING'
+        });
         currentBalance -= principal;
       }
     } else {
+      // ESTRATEGIA REDUCIR TIEMPO (PLAZO)
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+      
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
         
-        if (currentBalance <= 0) {
-          await supabase.from('loan_installments').update({
-            expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY'
-          }).eq('id', inst.id);
+        // Si el abono previo extinguió el saldo, esta cuota y las siguientes se anulan
+        if (currentBalance <= 0.5) { 
+          updates.push({
+            id: inst.id,
+            expected_amount: 0, 
+            principal_portion: 0, 
+            interest_portion: 0, 
+            status: 'PAID_EARLY'
+          });
           continue;
         }
 
         const interest = currentBalance * rate;
         let principal = fixedQuota - interest;
+        
+        // Ajuste en la última cuota real para no cobrar más de lo que debe
         if (currentBalance < principal) principal = currentBalance;
 
-        await supabase.from('loan_installments').update({
+        updates.push({
+          id: inst.id,
           expected_amount: Math.round(principal + interest),
           principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest)
-        }).eq('id', inst.id);
+          interest_portion: Math.round(interest),
+          status: 'PENDING'
+        });
         currentBalance -= principal;
       }
+    }
+
+    // Ejecutar actualizaciones en Supabase
+    for (const update of updates) {
+      await supabase.from('loan_installments').update({
+        expected_amount: update.expected_amount,
+        principal_portion: update.principal_portion,
+        interest_portion: update.interest_portion,
+        status: update.status
+      }).eq('id', update.id);
     }
   };
 
@@ -223,6 +251,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const expectedTotal = Number(selectedInstallment.expected_amount) + Number(paymentData.lateFee);
       const excedente = Number(paymentData.actualAmount) - expectedTotal;
 
+      // Actualizar la cuota actual
       const { error } = await supabase.from('loan_installments').update({
         status: status,
         actual_payment_date: paymentData.actualDate,
@@ -232,6 +261,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       if (error) throw error;
 
+      // Si hubo abono a capital, recalcular el futuro
       if (excedente > 0) {
         await recalculateFutureInstallments(excedente, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
         alert(`¡Pago registrado! Abono a capital de ${formatCurrency(excedente)} aplicado. Cuotas futuras recalculadas.`);
@@ -250,11 +280,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     if (!selectedLoan || loanInstallments.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Cuota Esperada,Capital,Interes,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
     loanInstallments.forEach(row => {
-      const rowData = [
-        row.installment_number, row.expected_payment_date, row.expected_amount, row.principal_portion,
-        row.interest_portion, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid, row.late_fee_charged
-      ];
-      csvContent += rowData.join(",") + "\n";
+      // Ignoramos las cuotas anuladas en el reporte Excel para mayor limpieza
+      if (row.status !== 'PAID_EARLY') {
+        const rowData = [
+          row.installment_number, row.expected_payment_date, row.expected_amount, row.principal_portion,
+          row.interest_portion, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid, row.late_fee_charged
+        ];
+        csvContent += rowData.join(",") + "\n";
+      }
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -280,7 +313,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     switch (status) {
       case 'PAID': return <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">Al día</span>;
       case 'LATE': return <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">Mora</span>;
-      case 'PAID_EARLY': return <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">Anulado</span>;
+      case 'PAID_EARLY': return <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">Anulada</span>;
       default: return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">Pendiente</span>;
     }
   };
@@ -451,7 +484,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Cuotas Pagadas</p>
                     <p className="text-lg font-bold text-slate-300">
-                      {loanInstallments.filter(i => i.status !== 'PENDING' && i.status !== 'PAID_EARLY').length} <span className="text-sm text-slate-500">de {selectedLoan.installments || selectedLoan.term_months}</span>
+                      {loanInstallments.filter(i => i.status !== 'PENDING' && i.status !== 'PAID_EARLY').length} <span className="text-sm text-slate-500">de {loanInstallments.filter(i => i.status !== 'PAID_EARLY').length}</span>
                     </p>
                   </div>
                 </div>
@@ -477,27 +510,20 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
                         {loanInstallments.map(inst => (
-                          <tr key={inst.id} className="hover:bg-slate-800/50 transition-colors">
+                          <tr key={inst.id} className={`transition-colors ${inst.status === 'PAID_EARLY' ? 'hidden' : 'hover:bg-slate-800/50'}`}>
                             <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
                             <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
                             <td className="p-3 font-medium text-slate-200 text-right tabular-nums">{formatCurrency(inst.expected_amount)}</td>
                             <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
                             <td className="p-3 text-center">
                               {inst.status === 'PENDING' ? (
-                                <button 
-                                  onClick={() => openPaymentModal(inst)}
-                                  className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors"
-                                >
-                                  Cobrar
-                                </button>
-                              ) : inst.status === 'PAID_EARLY' ? (
-                                <span className="text-xs text-slate-500">-</span>
-                              ) : (
+                                <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+                              ) : inst.status !== 'PAID_EARLY' ? (
                                 <div className="text-xs text-slate-400 flex flex-col items-center">
                                   <span>Pagado: {inst.actual_payment_date}</span>
                                   <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
                                 </div>
-                              )}
+                              ) : null}
                             </td>
                           </tr>
                         ))}
@@ -510,7 +536,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA 3: SOLICITUDES WEB */}
+        {/* PESTAÑA: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
           <>
             <div className="flex gap-2 mb-8 flex-wrap">
