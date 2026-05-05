@@ -280,10 +280,19 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const saldoPendiente = loanInstallments
-      .filter(i => i.status === 'PENDING')
+    
+    // 1. Partimos del Capital Original EXACTO
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
+    // 2. Sumamos únicamente el capital REAL que el cliente ya pagó
+    const capitalYaPagado = loanInstallments
+      .filter(i => i.status === 'PAID' || i.status === 'LATE')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    return saldoPendiente > 0 ? saldoPendiente : 0;
+      
+    // 3. El Saldo Vivo es la simple resta de ambos
+    const saldo = capitalOriginal - capitalYaPagado;
+    
+    return saldo > 0 ? saldo : 0;
   };
 
   const exportToCSV = () => {
