@@ -12,14 +12,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
+  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
+  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -158,11 +161,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
-    // Obtener cuotas futuras
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    // Calcular Saldo Vivo Exacto
+    // Calcular Saldo Vivo Exacto sumando el capital de las cuotas que aún dicen PENDING
     const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
     let newBalance = previousPendingPrincipal - excedenteCapital;
     
@@ -358,7 +360,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
-              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso, dependiendo del mes en el que cae el atraso del cliente.</p>
               
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
@@ -474,15 +476,19 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p>
                     <p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.principal_amount || selectedLoan.loan_amount)}</p>
                   </div>
+                  
+                  {/* SALDO VIVO PERFECCIONADO: Suma solo de cuotas PENDING */}
                   <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
                     <p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p>
                     <p className="text-xl font-bold text-emerald-400 font-mono">
                       {formatCurrency(
-                        (selectedLoan.principal_amount || selectedLoan.loan_amount) - 
-                        loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + (Number(i.actual_amount_paid) - Number(i.late_fee_charged) - Number(i.interest_portion)), 0)
+                        loanInstallments
+                          .filter(i => i.status === 'PENDING')
+                          .reduce((sum, i) => sum + Number(i.principal_portion), 0)
                       )}
                     </p>
                   </div>
+                  
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 flex flex-col justify-center">
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Estado de Cuotas</p>
                     <div className="flex justify-between items-center">
