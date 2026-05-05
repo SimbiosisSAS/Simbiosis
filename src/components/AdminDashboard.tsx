@@ -172,7 +172,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       }
 
       setShowPaymentModal(false);
-      // Recargar los datos para refrescar la tabla sin que la página se ponga en blanco
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
@@ -210,7 +209,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     document.body.removeChild(link);
   };
 
-  // Helper a prueba de fallos para la moneda
+  const updateStatus = async (appId: string, newStatus: string) => {
+    const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
+    if (!error) {
+      fetchApplications();
+      setSelectedApp(null);
+    }
+  };
+
   const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$ 0';
@@ -254,11 +260,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        
+        {/* PESTAÑA 1: SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
+        {/* PESTAÑA 2: CARTERA ACTIVA (Y GESTIÓN DE PAGOS) */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* Lista Izquierda */}
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
               <div className="p-6 border-b border-slate-700/50">
                 <div className="flex justify-between items-center mb-4">
@@ -319,7 +327,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               </div>
             </div>
 
-            {/* Panel Derecho - Detalles y Cuotas */}
             {selectedLoan && (
               <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 relative">
                 <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
@@ -335,14 +342,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p>
                     <p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.loan_amount || selectedLoan.principal_amount)}</p>
                   </div>
-                  
                   <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
                     <p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p>
                     <p className="text-xl font-bold text-emerald-400 font-mono">
                       {formatCurrency(loanInstallments.filter(i => i.status === 'PENDING').reduce((s, i) => s + Number(i.principal_portion), 0))}
                     </p>
                   </div>
-                  
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
                     <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Cuotas Pagadas</p>
                     <p className="text-lg font-bold text-slate-300">
@@ -405,10 +410,65 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
         {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
-          <div className="text-center p-12 bg-slate-800/40 rounded-2xl border border-slate-700/50">
-            <h2 className="text-xl font-bold text-white mb-4">Módulo de Solicitudes Web</h2>
-            <p className="text-slate-400">Esta vista ha sido reservada para gestionar los leads entrantes. Selecciona 'Cartera Activa' para operar los créditos otorgados.</p>
-          </div>
+          <>
+            <div className="flex gap-2 mb-8 flex-wrap">
+              {[{ status: 'ALL', label: 'Todas', color: 'bg-slate-700' }, { status: 'PENDING', label: 'Pendientes', color: 'bg-amber-600' }, { status: 'APPROVED', label: 'Aprobadas', color: 'bg-emerald-600' }, { status: 'REJECTED', label: 'Rechazadas', color: 'bg-red-600' }].map((btn) => (
+                <button
+                  key={btn.status}
+                  onClick={() => setFilterStatus(btn.status)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterStatus === btn.status ? `${btn.color} text-white shadow-sm` : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-200'}`}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-3">
+                {applications.length === 0 ? (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-400">No hay solicitudes en este estado</div>
+                ) : (
+                  applications.map((app) => (
+                    <div key={app.id} onClick={() => setSelectedApp(app)} className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all ${selectedApp?.id === app.id ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/5' : 'border-slate-700/50 hover:bg-slate-800/60'}`}>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3>
+                          <p className="text-xs text-slate-500">{app.email}</p>
+                          <p className="text-lg font-bold text-emerald-400 mt-2 font-mono">${Number(app.credit_amount).toLocaleString('es-CO')}</p>
+                        </div>
+                        <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div>
+                {selectedApp ? (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
+                    <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
+                    <div className="space-y-4 mb-6">
+                      <p className="text-slate-300"><strong>Nombre:</strong> {selectedApp.first_name} {selectedApp.last_name}</p>
+                      <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
+                      <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
+                    </div>
+                    {selectedApp.id_front_image && <div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl" /></div>}
+                    {selectedApp.id_back_image && <div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl" /></div>}
+                    {selectedApp.selfie_image && <div className="mb-6"><p className="text-xs text-slate-500 mb-1">Selfie</p><img src={selectedApp.selfie_image} className="w-full rounded-xl" /></div>}
+                    
+                    {selectedApp.status === 'PENDING' && (
+                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
+                        <button onClick={() => updateStatus(selectedApp.id, 'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button>
+                        <button onClick={() => updateStatus(selectedApp.id, 'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
 
