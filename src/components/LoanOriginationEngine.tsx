@@ -201,16 +201,22 @@ export default function LoanOriginationEngine() {
       if (loanError) throw loanError;
 
       // 2. Guardar las cuotas individuales para poder registrar pagos después
-      const installmentsToInsert = result.rows.map(row => ({
-        loan_id: loanData.id,
-        installment_number: row.installmentNumber,
-        // Convertir fecha '8 de ago de 2025' a formato ISO para la BD
-        expected_payment_date: new Date(params.disbursementDate).setMonth(new Date(params.disbursementDate).getMonth() + row.installmentNumber),
-        expected_amount: row.paymentAmount,
-        principal_portion: row.principal,
-        interest_portion: row.interest,
-        status: 'PENDING'
-      }));
+      const installmentsToInsert = result.rows.map(row => {
+        // Calcular la fecha correcta sumando meses a la fecha de desembolso
+        const paymentDate = new Date(params.disbursementDate);
+        paymentDate.setMonth(paymentDate.getMonth() + row.installmentNumber);
+        
+        return {
+          loan_id: loanData.id,
+          installment_number: row.installmentNumber,
+          // Formato YYYY-MM-DD para Supabase
+          expected_payment_date: paymentDate.toISOString().split('T')[0],
+          expected_amount: row.paymentAmount,
+          principal_portion: row.principal,
+          interest_portion: row.interest,
+          status: 'PENDING'
+        };
+      });
 
       const { error: installmentsError } = await supabase
         .from('loan_installments')
