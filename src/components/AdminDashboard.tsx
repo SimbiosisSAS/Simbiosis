@@ -157,13 +157,24 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
+  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
+    // 1. Obtener todas las cuotas futuras
     const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    let newBalance = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0) - excedenteCapital;
+    // 2. CALCULAR EL NUEVO SALDO VIVO REAL
+    // Sumamos el capital de TODAS las cuotas pendientes antes de este pago...
+    const previousPendingPrincipal = loanInstallments
+      .filter(i => i.installment_number >= selectedInstallment.installment_number && i.status === 'PENDING')
+      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    
+    // ...y le restamos el capital de la cuota normal actual MÁS el excedente que pagó extra
+    const basePrincipalPaidThisMonth = Number(selectedInstallment.principal_portion);
+    let newBalance = previousPendingPrincipal - basePrincipalPaidThisMonth - excedenteCapital;
+    
     if (newBalance <= 0) newBalance = 0;
 
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
@@ -193,6 +204,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         currentBalance -= principal;
       }
     } else {
+      // ESTRATEGIA REDUCIR TIEMPO (PLAZO)
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -200,7 +212,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         
         if (currentBalance <= 0.5) { 
           updates.push({
-            id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY'
+            id: inst.id,
+            expected_amount: 0, 
+            principal_portion: 0, 
+            interest_portion: 0, 
+            status: 'PAID_EARLY'
           });
           continue;
         }
@@ -351,7 +367,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
-              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso, dependiendo del mes en el que cae el atraso del cliente.</p>
               
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
@@ -365,7 +381,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <input type="number" value={newRate.year} onChange={e => setNewRate({...newRate, year: Number(e.target.value)})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500" />
                 </div>
                 <div className="flex-[2]">
-                  <label className="block text-xs font-semibold text-emerald-400 uppercase mb-2">Tasa Diaria</label>
+                  <label className="block text-xs font-semibold text-emerald-400 uppercase mb-2">Tasa Diaria (Ej: 0.00062)</label>
                   <input type="number" step="0.000000001" required value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} className="w-full bg-slate-800 border border-emerald-500/50 rounded-lg p-2.5 text-white font-mono outline-none focus:border-emerald-500" placeholder="0.00000" />
                 </div>
                 <button type="submit" className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors">
@@ -379,7 +395,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <tr><th className="p-4">Periodo</th><th className="p-4 text-right">Tasa Diaria Registrada</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
-                    {usuryRates.map((rate) => (
+                    {usuryRates.length === 0 ? (
+                      <tr><td colSpan={2} className="p-4 text-center text-slate-500">No hay tasas registradas. El sistema no cobrará mora.</td></tr>
+                    ) : usuryRates.map((rate) => (
                       <tr key={rate.id} className="hover:bg-slate-800/50">
                         <td className="p-4 text-slate-200 font-medium">{monthNames[rate.period_month - 1]} {rate.period_year}</td>
                         <td className="p-4 text-emerald-400 font-mono text-right">{rate.daily_late_rate}</td>
