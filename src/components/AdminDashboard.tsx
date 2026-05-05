@@ -12,14 +12,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
+  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
+  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -154,26 +157,22 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
-  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
-    if (!selectedLoan || !selectedInstallment) return;
-    
-    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
+  // --- LÓGICA BANCARIA EXACTA ---
+  
+  const recalculateFutureInstallments = async (nuevoSaldoVivo: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA', currentInstNumber: number) => {
+    // Buscar SOLO las cuotas que están estrictamente por delante de la que acabamos de pagar
+    const futureInstallments = loanInstallments.filter(i => i.installment_number > currentInstNumber && i.status === 'PENDING');
     if (futureInstallments.length === 0) return;
 
-    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let newBalance = previousPendingPrincipal - excedenteCapital;
-    
-    if (newBalance <= 0) newBalance = 0;
-
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    const remainingMonths = futureInstallments.length;
-    let currentBalance = newBalance;
+    let currentBalance = nuevoSaldoVivo;
 
     const updates = [];
 
     if (strategy === 'REDUCE_QUOTA') {
-      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      const remainingMonths = futureInstallments.length;
+      // NUEVA CUOTA FIJA EXACTA
+      const newFixedQuota = currentBalance <= 0 ? 0 : currentBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
       
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
@@ -198,6 +197,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         currentBalance -= principal;
       }
     } else {
+      // ESTRATEGIA REDUCIR TIEMPO
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
       
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -224,6 +224,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       }
     }
 
+    // Ejecutar TODAS las actualizaciones en Supabase
     for (const update of updates) {
       await supabase.from('loan_installments').update({
         expected_amount: update.expected_amount,
@@ -234,15 +235,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
-  // --- LÓGICA DE REGISTRO DE PAGO BLINDADA ---
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
     try {
-      // Limpieza extrema de números
       const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
-      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString()) || 0;
       
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
@@ -250,45 +249,60 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
-      console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
+      // EL PASO CRÍTICO: Sumar el abono extra al capital de ESTA cuota
+      const capitalOriginalDeEstaCuota = Number(selectedInstallment.principal_portion);
+      const nuevoCapitalPagadoHoy = capitalOriginalDeEstaCuota + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
-      const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
-
+      // 1. Guardar el pago en Supabase
       const { error } = await supabase.from('loan_installments').update({
         status: status,
         actual_payment_date: paymentData.actualDate,
         actual_amount_paid: pagoReal,
         late_fee_charged: moraCobrada,
-        principal_portion: nuevoPrincipalPagadoEstaCuota
+        principal_portion: nuevoCapitalPagadoHoy 
       }).eq('id', selectedInstallment.id);
 
       if (error) throw error;
 
+      // 2. Calcular el NUEVO SALDO VIVO MATEMÁTICO EXACTO
+      const capitalOriginalDelCredito = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+      const capitalYaPagado = loanInstallments
+        .filter(i => (i.status === 'PAID' || i.status === 'LATE') && i.id !== selectedInstallment.id)
+        .reduce((sum, i) => sum + Number(i.principal_portion), 0);
+      
+      const saldoVivoDespuesDeEstePago = capitalOriginalDelCredito - capitalYaPagado - nuevoCapitalPagadoHoy;
+
+      // 3. Recalcular el futuro SI HUBO ABONO EXTRA
       if (abonoCapitalExtra > 10) {
-        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
+        await recalculateFutureInstallments(saldoVivoDespuesDeEstePago, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA', selectedInstallment.installment_number);
+        alert(`¡Abono extra a capital aplicado! Cuotas futuras recalculadas.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
 
       setShowPaymentModal(false);
       
-      // Forzamos recarga visual de la tabla
-      setLoanInstallments([]);
+      // FORZAR ACTUALIZACIÓN VISUAL
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
-      console.error("Error en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
 
+  // --- CÁLCULO VISUAL DEL SALDO VIVO BLINDADO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const saldoPendiente = loanInstallments
-      .filter(i => i.status === 'PENDING')
+    
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
+    const capitalPagado = loanInstallments
+      .filter(i => i.status === 'PAID' || i.status === 'LATE')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    return saldoPendiente > 0 ? saldoPendiente : 0;
+      
+    const saldo = capitalOriginal - capitalPagado;
+    
+    return capitalPagado === 0 ? capitalOriginal : (saldo > 0 ? saldo : 0);
   };
 
   const exportToCSV = () => {
@@ -365,8 +379,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         
+        {/* PESTAÑA: SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
+        {/* PESTAÑA: CONFIGURACIÓN DE TASAS */}
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
@@ -414,6 +430,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
+        {/* PESTAÑA: CARTERA ACTIVA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
