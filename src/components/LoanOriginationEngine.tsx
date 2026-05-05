@@ -175,35 +175,61 @@ export default function LoanOriginationEngine() {
     });
   };
 
+  // ESTA ES LA FUNCIÓN CLAVE QUE GUARDARÁ EN SUPABASE
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
+    
     try {
-      const { error } = await supabase.from('active_loans').insert({
-        client_name: params.clientName,
-        client_id: params.clientId,
-        principal_amount: params.principalAmount,
-        origination_costs: params.originationCosts,
-        disbursement_date: params.disbursementDate,
-        nominal_rate_mv: params.nominalRateMV,
-        term_months: params.termMonths,
-        monthly_payment: result.monthlyPayment,
-        total_payment: result.totalPayment,
-        tir: result.tir,
-        status: 'ACTIVE',
-        amortization_schedule: result.rows,
-      });
-      if (error) throw error;
+      // 1. Guardar el crédito maestro
+      const { data: loanData, error: loanError } = await supabase
+        .from('active_loans')
+        .insert({
+          client_name: params.clientName,
+          client_id_number: params.clientId,
+          loan_amount: params.principalAmount,
+          associated_costs: params.originationCosts,
+          disbursement_date: params.disbursementDate,
+          interest_rate_monthly: params.nominalRateMV,
+          installments: params.termMonths,
+          fixed_quota_amount: result.monthlyPayment,
+          status: 'ACTIVE'
+        })
+        .select()
+        .single();
+
+      if (loanError) throw loanError;
+
+      // 2. Guardar las cuotas individuales para poder registrar pagos después
+      const installmentsToInsert = result.rows.map(row => ({
+        loan_id: loanData.id,
+        installment_number: row.installmentNumber,
+        // Convertir fecha '8 de ago de 2025' a formato ISO para la BD
+        expected_payment_date: new Date(params.disbursementDate).setMonth(new Date(params.disbursementDate).getMonth() + row.installmentNumber),
+        expected_amount: row.paymentAmount,
+        principal_portion: row.principal,
+        interest_portion: row.interest,
+        status: 'PENDING'
+      }));
+
+      const { error: installmentsError } = await supabase
+        .from('loan_installments')
+        .insert(installmentsToInsert);
+
+      if (installmentsError) throw installmentsError;
+
       setActivateSuccess(true);
-    } catch (err) {
-      console.error('Error activating loan:', err);
+      alert('¡Crédito activado y plan de pagos guardado exitosamente!');
+    } catch (err: any) {
+      console.error('Error activando el crédito:', err);
+      alert('Hubo un error al guardar: ' + err.message);
     } finally {
       setActivating(false);
     }
   };
 
   const handleExportPDF = () => {
-    alert('Funcionalidad de exportacion a PDF en desarrollo. El plan de amortizacion estara disponible para descarga pronto.');
+    alert('Funcionalidad de exportación a PDF en desarrollo. El plan de amortización estará disponible para descarga pronto.');
   };
 
   const isValid = params.clientName && params.clientId && params.principalAmount > 0 && params.nominalRateMV > 0 && params.termMonths > 0 && params.disbursementDate;
@@ -223,8 +249,8 @@ export default function LoanOriginationEngine() {
                 <Calculator className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Parametros del Credito</h3>
-                <p className="text-xs text-slate-500">Configura las variables del prestamo</p>
+                <h3 className="text-sm font-bold text-slate-200">Parámetros del Crédito</h3>
+                <p className="text-xs text-slate-500">Configura las variables del préstamo</p>
               </div>
             </div>
 
@@ -246,14 +272,14 @@ export default function LoanOriginationEngine() {
               <div>
                 <label className={labelClass}>
                   <Hash className="w-3 h-3 inline mr-1" />
-                  Identificacion
+                  Identificación
                 </label>
                 <input
                   type="text"
                   value={params.clientId}
                   onChange={(e) => setParams(p => ({ ...p, clientId: e.target.value }))}
                   className={inputClass}
-                  placeholder="Cedula o NIT"
+                  placeholder="Cédula o NIT"
                 />
               </div>
 
@@ -275,7 +301,7 @@ export default function LoanOriginationEngine() {
               <div>
                 <label className={labelClass}>
                   <DollarSign className="w-3 h-3 inline mr-1" />
-                  Costos de Originacion (COP)
+                  Costos de Originación (COP)
                 </label>
                 <input
                   type="number"
@@ -361,8 +387,8 @@ export default function LoanOriginationEngine() {
                 <TrendingUp className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Proyeccion en Vivo</h3>
-                <p className="text-xs text-slate-500">Resumen del plan de amortizacion</p>
+                <h3 className="text-sm font-bold text-slate-200">Proyección en Vivo</h3>
+                <p className="text-xs text-slate-500">Resumen del plan de amortización</p>
               </div>
             </div>
 
@@ -371,8 +397,8 @@ export default function LoanOriginationEngine() {
                 <div className="w-16 h-16 bg-slate-700/30 rounded-2xl flex items-center justify-center mb-4">
                   <Calculator className="w-8 h-8 text-slate-600" />
                 </div>
-                <p className="text-slate-500 text-sm">Configura los parametros y presiona</p>
-                <p className="text-slate-500 text-sm">"Calcular Plan" para ver la proyeccion</p>
+                <p className="text-slate-500 text-sm">Configura los parámetros y presiona</p>
+                <p className="text-slate-500 text-sm">"Calcular Plan" para ver la proyección</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -408,7 +434,7 @@ export default function LoanOriginationEngine() {
                     </p>
                   </div>
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Costos Originacion</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Costos Originación</p>
                     <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">
                       {formatCurrency(params.originationCosts)}
                     </p>
@@ -441,7 +467,7 @@ export default function LoanOriginationEngine() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Rocket className="w-4 h-4" />
-                    {activating ? 'Activando...' : activateSuccess ? 'Credito Activado' : 'Activar Credito'}
+                    {activating ? 'Activando...' : activateSuccess ? 'Crédito Activado' : 'Activar Crédito'}
                   </button>
                 </div>
               </div>
@@ -462,7 +488,7 @@ export default function LoanOriginationEngine() {
                 <Calculator className="w-4 h-4 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Tabla de Amortizacion - Sistema Frances</h3>
+                <h3 className="text-sm font-bold text-slate-200">Tabla de Amortización - Sistema Francés</h3>
                 <p className="text-xs text-slate-500">{result.rows.length} cuotas | Cuota fija: {formatCurrency(result.monthlyPayment)}</p>
               </div>
             </div>
@@ -483,7 +509,7 @@ export default function LoanOriginationEngine() {
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Costos Asociados</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Inicio</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Capital</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Interes</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Interés</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Vr. Cuota</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Final</th>
                   </tr>
