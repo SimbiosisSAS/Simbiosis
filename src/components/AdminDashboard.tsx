@@ -549,7 +549,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                             <td className="p-3 text-slate-400 text-right tabular-nums">{row.associatedCosts > 0 ? formatCurrency(row.associatedCosts) : '--'}</td>
                             <td className="p-3 text-emerald-400 text-right tabular-nums font-semibold">{formatCurrency(row.principal)}</td>
                             <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(row.interest)}</td>
-                            <td className="p-3 text-red-400/80 text-right tabular-nums">{row.mora > 0 ? formatCurrency(row.mora) : '--'}</td>
+                            <td className="p-3 text-red-400/80 text-right tabular-nums">
+  {Number(row.mora) > 0 ? formatCurrency(Number(row.mora)) : '--'}
+</td>
                             <td className="p-3 font-bold text-slate-200 text-right tabular-nums">
                               {formatCurrency(row.status === 'PENDING' ? row.expectedAmount : row.totalPaid)}
                             </td>
