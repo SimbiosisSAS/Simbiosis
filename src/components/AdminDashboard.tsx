@@ -322,7 +322,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       
       const principal = Number(inst.principal_portion);
       const interest = Number(inst.interest_portion);
-      const mora = Number(inst.late_fee_charged || 0);
+      const mora = parseFloat(inst.late_fee_charged?.toString() || '0');
       const expectedAmount = Number(inst.expected_amount);
       const totalPaid = Number(inst.actual_amount_paid || 0);
       
