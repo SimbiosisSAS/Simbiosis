@@ -32,6 +32,7 @@ const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
   });
   
 const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos');
+  const [historialCliente, setHistorialCliente] = useState<any[]>([]);
 const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
 const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
 
