@@ -509,8 +509,10 @@ const totalMoras = loanInstallments.reduce((s, i) => {
     <body>
       <div class="header">
         <div>
-          <div class="logo">Simbiosis</div>
-          <div class="subtitle">Loan Management System</div>
+          <div style="font-size:30px; font-weight:900; font-family:Arial,sans-serif; background:linear-gradient(to right, #ef4444, #f97316, #f59e0b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1;">
+  SIMBIOSIS
+</div>
+<div style="font-size:11px; color:#9ca3af; letter-spacing:2px; margin-top:2px;">conoce, invierte, crece</div>
         </div>
         <div style="text-align:right;">
           <h2>Estado de Cuenta</h2>
