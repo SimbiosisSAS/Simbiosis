@@ -1026,7 +1026,44 @@ const handleDeleteApplication = async (appId: string) => {
                     </div>
                   </div>
                 </div>
-
+{historialCliente.length > 0 && (
+  <div className="mb-6 bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
+    <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+      <FileText size={14} className="text-amber-400" />
+      Historial crediticio del cliente
+      <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">
+        {historialCliente.length} crédito{historialCliente.length !== 1 ? 's' : ''} anterior{historialCliente.length !== 1 ? 'es' : ''}
+      </span>
+    </h4>
+    <div className="space-y-2">
+      {historialCliente.map(loan => {
+        const monto = Number(loan.principal_amount || loan.loan_amount);
+        return (
+          <div key={loan.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-3">
+              <div>
+                <p className="text-xs font-semibold text-slate-300">
+                  Crédito #{loan.loan_number || loan.id.slice(0,8)}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Desembolso: {new Date(loan.disbursement_date).toLocaleDateString('es-CO')}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold text-emerald-400 font-mono">
+                {formatCurrency(monto)}
+              </p>
+              <p className="text-xs text-slate-500">
+                {loan.interest_rate_monthly ?? loan.nominal_rate_mv ?? '--'}% MV · {loan.installments || loan.term_months || '--'} meses
+              </p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
                 <div className="flex justify-between items-end mb-4">
   <h3 className="text-lg font-bold text-white">Gestión de Pagos</h3>
   <div className="flex gap-2">
