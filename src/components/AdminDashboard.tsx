@@ -459,23 +459,12 @@ if (inst.status === 'PENDING') {
     }).join('');
 
   const totalIntereses = loanInstallments.reduce((s, i) => s + Number(i.interest_portion), 0);
-  const hoyDocStr = new Date().toISOString().split('T')[0];
-  const hoyDocDate = new Date(); hoyDocDate.setHours(0,0,0,0);
+const totalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
+const saldoVivo = calculateCurrentBalance();
 
-const cuotasVencidas = loanInstallments.filter(i => {
-  if (i.status !== 'PENDING') return false;
-  const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
-  return f < hoyDocDate;
-});
-const cuotasFuturas = loanInstallments.filter(i => {
-  if (i.status !== 'PENDING') return false;
-  const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
-  return f >= hoyDocDate;
-});
-const totalCuotasVencidas = cuotasVencidas.reduce((s, i) => s + Number(i.expected_amount), 0);
-const totalCuotasFuturas = cuotasFuturas.reduce((s, i) => s + Number(i.expected_amount), 0);
-const totalARegularizar = totalCuotasVencidas + totalMoras;
-const totalDeudaHoy = totalARegularizar + totalCuotasFuturas;
+const hoyDocStr = new Date().toISOString().split('T')[0];
+const hoyDocDate = new Date(); hoyDocDate.setHours(0, 0, 0, 0);
+
 const totalMoras = loanInstallments.reduce((s, i) => {
   if (i.status === 'PENDING') {
     const fechaEsp = new Date(i.expected_payment_date);
@@ -488,8 +477,21 @@ const totalMoras = loanInstallments.reduce((s, i) => {
   }
   return s + Number(i.late_fee_charged || 0);
 }, 0);
-  const totalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
-  const saldoVivo = calculateCurrentBalance();
+
+const cuotasVencidas = loanInstallments.filter(i => {
+  if (i.status !== 'PENDING') return false;
+  const f = new Date(i.expected_payment_date); f.setHours(0, 0, 0, 0);
+  return f < hoyDocDate;
+});
+const cuotasFuturas = loanInstallments.filter(i => {
+  if (i.status !== 'PENDING') return false;
+  const f = new Date(i.expected_payment_date); f.setHours(0, 0, 0, 0);
+  return f >= hoyDocDate;
+});
+const totalCuotasVencidas = cuotasVencidas.reduce((s, i) => s + Number(i.expected_amount), 0);
+const totalCuotasFuturas = cuotasFuturas.reduce((s, i) => s + Number(i.expected_amount), 0);
+const totalARegularizar = totalCuotasVencidas + totalMoras;
+const totalDeudaHoy = totalARegularizar + totalCuotasFuturas;
 
   const html = `
     <!DOCTYPE html>
