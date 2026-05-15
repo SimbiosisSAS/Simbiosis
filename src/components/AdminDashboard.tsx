@@ -29,6 +29,16 @@ const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
     daysLate: 0,
     extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
+const [paymentData, setPaymentData] = useState({
+  actualDate: new Date().toISOString().split('T')[0],
+  actualAmount: 0,
+  lateFee: 0,
+  daysLate: 0,
+  extraPaymentType: 'REDUCE_TIME'
+});
+const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos'); // ← NUEVA LÍNEA
 
  useEffect(() => {
   fetchUsuryRates(); // ← cargar tasas siempre, en cualquier pestaña
