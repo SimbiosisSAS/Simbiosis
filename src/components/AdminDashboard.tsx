@@ -19,14 +19,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
-  const [paymentData, setPaymentData] = useState({
-    actualDate: new Date().toISOString().split('T')[0],
-    actualAmount: 0,
-    lateFee: 0,
-    daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME',
-  });
-
+  const [paymentData, setPaymentData] = useState({ actualDate: new Date().toISOString().split('T')[0], actualAmount: 0, lateFee: 0, daysLate: 0, extraPaymentType: 'REDUCE_TIME' });
   const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   useEffect(() => {
@@ -66,52 +59,42 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const handleAddUsuryRate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('usury_rates').upsert(
-        { period_month: newRate.month, period_year: newRate.year, daily_late_rate: Number(newRate.rate) },
-        { onConflict: 'period_month,period_year' }
-      );
+      const { error } = await supabase.from('usury_rates').upsert({ period_month: newRate.month, period_year: newRate.year, daily_late_rate: Number(newRate.rate) }, { onConflict: 'period_month,period_year' });
       if (error) throw error;
       alert('Tasa guardada exitosamente');
       fetchUsuryRates();
       setNewRate({ ...newRate, rate: '' });
-    } catch (err: any) { alert('Error guardando tasa. Detalle: ' + err.message); }
+    } catch (err: any) { alert('Error: ' + err.message); }
   };
 
   const handleSelectLoan = (loan: any) => { setSelectedLoan(loan); fetchInstallments(loan.id); };
 
   const handleDeleteLoan = async () => {
-    if (!selectedLoan) return;
-    if (!window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? No se puede deshacer.`)) return;
+    if (!selectedLoan || !window.confirm(`¿Eliminar el crédito de ${selectedLoan.client_name}? No se puede deshacer.`)) return;
     try {
       const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
       if (error) throw error;
-      alert('Crédito eliminado exitosamente');
-      setSelectedLoan(null);
-      fetchActiveLoans();
-    } catch (err: any) { alert('Error al eliminar el crédito: ' + err.message); }
+      alert('Crédito eliminado'); setSelectedLoan(null); fetchActiveLoans();
+    } catch (err: any) { alert('Error: ' + err.message); }
   };
 
   const updateStatus = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
       const { error } = await supabase.from('credit_applications').update({ status }).eq('id', id);
       if (error) throw error;
-      alert(`Solicitud ${status === 'APPROVED' ? 'aprobada' : 'rechazada'} exitosamente.`);
-      fetchApplications();
-      setSelectedApp(null);
-    } catch (err: any) { alert('Error actualizando estado: ' + err.message); }
+      alert(`Solicitud ${status === 'APPROVED' ? 'aprobada' : 'rechazada'}.`);
+      fetchApplications(); setSelectedApp(null);
+    } catch (err: any) { alert('Error: ' + err.message); }
   };
 
   const calculateLateFee = (expectedDateStr: string, actualDateStr: string, amount: number) => {
-    const expected = new Date(expectedDateStr);
-    const actual = new Date(actualDateStr);
-    expected.setHours(0, 0, 0, 0);
-    actual.setHours(0, 0, 0, 0);
-    const totalDaysLate = Math.ceil((actual.getTime() - expected.getTime()) / (1000 * 60 * 60 * 24));
+    const expected = new Date(expectedDateStr); const actual = new Date(actualDateStr);
+    expected.setHours(0,0,0,0); actual.setHours(0,0,0,0);
+    const totalDaysLate = Math.ceil((actual.getTime() - expected.getTime()) / 86400000);
     if (totalDaysLate <= 0) return { days: 0, penalty: 0 };
     let penalty = 0;
     for (let i = 1; i <= totalDaysLate; i++) {
-      const d = new Date(expected.getTime());
-      d.setDate(expected.getDate() + i);
+      const d = new Date(expected.getTime()); d.setDate(expected.getDate() + i);
       const rec = usuryRates.find(r => r.period_month === d.getMonth() + 1 && r.period_year === d.getFullYear());
       penalty += amount * (rec ? Number(rec.daily_late_rate) : 0);
     }
@@ -120,19 +103,18 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const openPaymentModal = (installment: any) => {
     const today = new Date().toISOString().split('T')[0];
-    const moraCalc = calculateLateFee(installment.expected_payment_date, today, installment.expected_amount);
+    const m = calculateLateFee(installment.expected_payment_date, today, installment.expected_amount);
     setSelectedInstallment(installment);
-    setPaymentData({ actualDate: today, lateFee: moraCalc.penalty, daysLate: moraCalc.days, actualAmount: Number(installment.expected_amount) + moraCalc.penalty, extraPaymentType: 'REDUCE_TIME' });
+    setPaymentData({ actualDate: today, lateFee: m.penalty, daysLate: m.days, actualAmount: Number(installment.expected_amount) + m.penalty, extraPaymentType: 'REDUCE_TIME' });
     setShowPaymentModal(true);
   };
 
   const handleDateChangeInModal = (newDate: string) => {
     if (!selectedInstallment) return;
-    const moraCalc = calculateLateFee(selectedInstallment.expected_payment_date, newDate, selectedInstallment.expected_amount);
-    setPaymentData(prev => ({ ...prev, actualDate: newDate, lateFee: moraCalc.penalty, daysLate: moraCalc.days, actualAmount: Number(selectedInstallment.expected_amount) + moraCalc.penalty }));
+    const m = calculateLateFee(selectedInstallment.expected_payment_date, newDate, selectedInstallment.expected_amount);
+    setPaymentData(prev => ({ ...prev, actualDate: newDate, lateFee: m.penalty, daysLate: m.days, actualAmount: Number(selectedInstallment.expected_amount) + m.penalty }));
   };
 
-  // ── HELPER: DETECTAR TASA ────────────────────────────────────────────────────
   const getLoanRate = (loan: any, installments: any[]): number => {
     const rateRaw = loan.interest_rate_monthly ?? loan.nominal_rate_mv ?? null;
     let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
@@ -144,22 +126,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     return rate;
   };
 
-  // ── RECALCULAR CUOTAS FUTURAS (ABONO EXTRA) ──────────────────────────────────
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
-
-    const futureInstallments = loanInstallments
-      .filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING')
-      .sort((a, b) => a.installment_number - b.installment_number);
-
+    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
     if (futureInstallments.length === 0) return;
-
     const saldoPendiente = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
     let newBalance = Math.max(saldoPendiente - excedenteCapital, 0);
-
     const rate = getLoanRate(selectedLoan, loanInstallments);
-    if (!rate || rate <= 0) { alert('Error crítico: No se pudo determinar la tasa del crédito.'); return; }
-
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa del crédito.'); return; }
     const updates: any[] = [];
     let currentBalance = newBalance;
 
@@ -178,53 +152,43 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       }
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida. Verifica fixed_quota_amount en Supabase.'); return; }
-      let balanceFinished = false;
+      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
+      let done = false;
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
-        if (balanceFinished || currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
+        if (done || currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
         const interest = Math.round(currentBalance * rate);
         let principal = fixedQuota - interest;
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
           updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
-          currentBalance = 0; balanceFinished = true; continue;
+          currentBalance = 0; done = true; continue;
         }
         principal = Math.round(principal);
         currentBalance = Math.round(currentBalance - principal);
         updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
       }
     }
-
     for (const u of updates) {
       await supabase.from('loan_installments').update({ expected_amount: u.expected_amount, principal_portion: u.principal_portion, interest_portion: u.interest_portion, status: u.status }).eq('id', u.id);
     }
   };
 
-  // ── RECALCULAR PLAN COMPLETO DESDE SALDO ACTUAL ───────────────────────────────
   const repairFullSchedule = async () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES del crédito de ${selectedLoan.client_name} desde el saldo actual?\n\nEsto corrige cualquier error en el plan de pagos existente.`)) return;
-
+    if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES de ${selectedLoan.client_name} desde el saldo actual?`)) return;
     const rate = getLoanRate(selectedLoan, loanInstallments);
-    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa del crédito.'); return; }
-
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
     const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-    if (!fixedQuota || fixedQuota <= 0) { alert('Error: No se pudo determinar la cuota fija del crédito.'); return; }
-
-    const pendingInstallments = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
-    if (pendingInstallments.length === 0) { alert('No hay cuotas pendientes para recalcular.'); return; }
-
+    if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
+    const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
+    if (pending.length === 0) { alert('No hay cuotas pendientes.'); return; }
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let currentBalance = Math.max(capitalOriginal - capitalYaPagado, 0);
-
-    for (let i = 0; i < pendingInstallments.length; i++) {
-      const inst = pendingInstallments[i];
-      if (currentBalance <= 0.5) {
-        await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id);
-        continue;
-      }
+    const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
+    let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
+    for (let i = 0; i < pending.length; i++) {
+      const inst = pending[i];
+      if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
       const interest = Math.round(currentBalance * rate);
       let principal = fixedQuota - interest;
       if (principal >= currentBalance) {
@@ -236,12 +200,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
       currentBalance = Math.round(currentBalance - principal);
     }
-
-    alert('¡Plan de pagos recalculado correctamente!');
+    alert('¡Plan recalculado correctamente!');
     await fetchInstallments(selectedLoan.id);
   };
 
-  // ── REGISTRAR PAGO ────────────────────────────────────────────────────────────
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     try {
@@ -249,35 +211,24 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g, '')) || 0;
       const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')) || 0;
       const isLate = paymentData.daysLate > 0;
-      const status = isLate ? 'LATE' : 'PAID';
       const abonoCapitalExtra = pagoReal - (cuotaBase + moraCobrada);
       const nuevoPrincipal = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
-
-      const { error } = await supabase.from('loan_installments').update({
-        status, actual_payment_date: paymentData.actualDate, actual_amount_paid: pagoReal,
-        late_fee_charged: moraCobrada, principal_portion: nuevoPrincipal,
-      }).eq('id', selectedInstallment.id);
+      const { error } = await supabase.from('loan_installments').update({ status: isLate ? 'LATE' : 'PAID', actual_payment_date: paymentData.actualDate, actual_amount_paid: pagoReal, late_fee_charged: moraCobrada, principal_portion: nuevoPrincipal }).eq('id', selectedInstallment.id);
       if (error) throw error;
-
       if (abonoCapitalExtra > 10) {
         await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
         alert(`¡Pago registrado! Abono extra de ${formatCurrency(abonoCapitalExtra)} aplicado.`);
-      } else {
-        alert('¡Pago registrado con éxito!');
-      }
-
-      setShowPaymentModal(false);
-      setLoanInstallments([]);
+      } else { alert('¡Pago registrado con éxito!'); }
+      setShowPaymentModal(false); setLoanInstallments([]);
       await fetchInstallments(selectedLoan.id);
-    } catch (err: any) { alert('Error al registrar pago: ' + err.message); }
+    } catch (err: any) { alert('Error: ' + err.message); }
   };
 
-  // ── HELPERS ───────────────────────────────────────────────────────────────────
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    return Math.max(capitalOriginal - capitalYaPagado, 0);
+    const cap = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const pagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
+    return Math.max(cap - pagado, 0);
   };
 
   const exportToCSV = () => {
@@ -286,11 +237,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     let bal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     loanInstallments.forEach((row, idx) => {
       if (row.status === 'PAID_EARLY') return;
-      const saldoInicio = bal;
-      let saldoFinal = Math.max(saldoInicio - Number(row.principal_portion), 0);
-      bal = saldoFinal;
+      const si = bal; let sf = Math.max(si - Number(row.principal_portion), 0); bal = sf;
       const costos = idx === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-      csv += [row.installment_number, row.expected_payment_date, saldoInicio, costos, row.principal_portion, row.interest_portion, row.late_fee_charged, Number(row.expected_amount) + costos, saldoFinal, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid].join(',') + '\n';
+      csv += [row.installment_number, row.expected_payment_date, si, costos, row.principal_portion, row.interest_portion, row.late_fee_charged, Number(row.expected_amount) + costos, sf, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid].join(',') + '\n';
     });
     const link = document.createElement('a');
     link.setAttribute('href', encodeURI(csv));
@@ -301,20 +250,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const formatCurrency = (val: any) => { const n = Number(val); return isNaN(n) ? '$ 0' : '$ ' + n.toLocaleString('es-CO'); };
 
   const getStatusBadge = (status: string) => {
-    const map: any = {
-      PAID: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-      LATE: 'bg-red-500/10 text-red-400 border-red-500/20',
-      PAID_EARLY: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-    };
-    const labels: any = { PAID: 'Al día', LATE: 'Mora', PAID_EARLY: 'Anulada' };
-    const cls = map[status] || 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-    const label = labels[status] || 'Pendiente';
+    const map: any = { PAID: ['bg-emerald-500/10 text-emerald-400 border-emerald-500/20','Al día'], LATE: ['bg-red-500/10 text-red-400 border-red-500/20','Mora'], PAID_EARLY: ['bg-slate-500/10 text-slate-400 border-slate-500/20','Anulada'] };
+    const [cls, label] = map[status] || ['bg-amber-500/10 text-amber-400 border-amber-500/20','Pendiente'];
     return <span className={`px-2 py-1 ${cls} border rounded-full text-xs font-semibold`}>{label}</span>;
   };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
 
@@ -331,7 +270,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             </div>
           </div>
           <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
-            {([['solicitudes','Solicitudes Web', FileText],['cartera','Cartera Activa', Wallet],['simulador','Nuevo Crédito', Calculator],['configuracion','Configuración', Settings]] as any[]).map(([tab, label, Icon]) => (
+            {([['solicitudes','Solicitudes Web',FileText],['cartera','Cartera Activa',Wallet],['simulador','Nuevo Crédito',Calculator],['configuracion','Configuración',Settings]] as any[]).map(([tab,label,Icon]) => (
               <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === tab ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}>
                 <Icon className="w-4 h-4" /> {label}
               </button>
@@ -346,7 +285,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       </nav>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
         {/* CONFIGURACIÓN */}
@@ -357,17 +295,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
-                  <select value={newRate.month} onChange={e => setNewRate({ ...newRate, month: Number(e.target.value) })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500">
-                    {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  <select value={newRate.month} onChange={e => setNewRate({...newRate, month: Number(e.target.value)})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500">
+                    {monthNames.map((m,i) => <option key={i} value={i+1}>{m}</option>)}
                   </select>
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Año</label>
-                  <input type="number" value={newRate.year} onChange={e => setNewRate({ ...newRate, year: Number(e.target.value) })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500" />
+                  <input type="number" value={newRate.year} onChange={e => setNewRate({...newRate, year: Number(e.target.value)})} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500" />
                 </div>
                 <div className="flex-[2]">
                   <label className="block text-xs font-semibold text-emerald-400 uppercase mb-2">Tasa Diaria (Ej: 0.00062)</label>
-                  <input type="number" step="0.000000001" required value={newRate.rate} onChange={e => setNewRate({ ...newRate, rate: e.target.value })} className="w-full bg-slate-800 border border-emerald-500/50 rounded-lg p-2.5 text-white font-mono outline-none focus:border-emerald-500" placeholder="0.00000" />
+                  <input type="number" step="0.000000001" required value={newRate.rate} onChange={e => setNewRate({...newRate, rate: e.target.value})} className="w-full bg-slate-800 border border-emerald-500/50 rounded-lg p-2.5 text-white font-mono outline-none focus:border-emerald-500" placeholder="0.00000" />
                 </div>
                 <button type="submit" className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors">
                   <Plus size={18} /> Agregar
@@ -376,14 +314,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase border-b border-slate-700/50">
-                    <tr><th className="p-4">Periodo</th><th className="p-4 text-right">Tasa Diaria Registrada</th></tr>
+                    <tr><th className="p-4">Periodo</th><th className="p-4 text-right">Tasa Diaria</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
                     {usuryRates.length === 0
                       ? <tr><td colSpan={2} className="p-4 text-center text-slate-500">No hay tasas registradas.</td></tr>
                       : usuryRates.map(r => (
                         <tr key={r.id} className="hover:bg-slate-800/50">
-                          <td className="p-4 text-slate-200 font-medium">{monthNames[r.period_month - 1]} {r.period_year}</td>
+                          <td className="p-4 text-slate-200 font-medium">{monthNames[r.period_month-1]} {r.period_year}</td>
                           <td className="p-4 text-emerald-400 font-mono text-right">{r.daily_late_rate}</td>
                         </tr>
                       ))}
@@ -397,8 +335,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         {/* CARTERA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
-
-            {/* LISTA */}
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
               <div className="p-6 border-b border-slate-700/50">
                 <h2 className="text-xl font-bold text-white mb-4">Créditos Otorgados</h2>
@@ -406,7 +342,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 flex justify-between">
                     <div>
                       <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Colocado</p>
-                      <p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(activeLoans.reduce((s, l) => s + Number(l.principal_amount || l.loan_amount), 0))}</p>
+                      <p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(activeLoans.reduce((s,l) => s + Number(l.principal_amount || l.loan_amount), 0))}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Créditos Activos</p>
@@ -432,7 +368,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                           <p className="text-xs text-slate-500 font-mono">{loan.client_id_number || loan.client_id}</p>
                         </td>
                         <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(loan.principal_amount || loan.loan_amount)}</td>
-                        {!selectedLoan && <td className="p-4 text-center"><button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg"><Eye size={16} /></button></td>}
+                        {!selectedLoan && <td className="p-4 text-center"><button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg"><Eye size={16}/></button></td>}
                       </tr>
                     ))}
                   </tbody>
@@ -440,7 +376,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               </div>
             </div>
 
-            {/* DETALLE CRÉDITO */}
             {selectedLoan && (
               <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
                 <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
@@ -449,12 +384,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                     <p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
-                      <Trash2 size={14} /> Eliminar
-                    </button>
-                    <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">
-                      Cerrar
-                    </button>
+                    <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1"><Trash2 size={14}/> Eliminar</button>
+                    <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">Cerrar</button>
                   </div>
                 </div>
 
@@ -478,37 +409,33 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   </div>
                 </div>
 
-                {/* BOTONES GESTIÓN */}
+                {/* BOTONES GESTIÓN — AQUÍ ESTÁ EL BOTÓN RECALCULAR PLAN */}
                 <div className="flex justify-between items-end mb-4">
                   <h3 className="text-lg font-bold text-white">Gestión de Pagos</h3>
                   <div className="flex gap-2">
                     <button onClick={repairFullSchedule} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-amber-600/50 rounded-lg text-amber-400 hover:text-white hover:bg-amber-600 hover:border-amber-500 text-sm transition-colors">
-                      <Calculator size={14} /> Recalcular Plan
+                      <Calculator size={14}/> Recalcular Plan
                     </button>
                     <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-emerald-500 text-sm transition-colors">
-                      <Download size={14} /> Exportar Excel
+                      <Download size={14}/> Exportar Excel
                     </button>
                   </div>
                 </div>
 
-                {/* TABLA DE CUOTAS */}
                 {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
                   <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                       <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
                         <tr>
-                          <th className="p-3">Cuota</th>
-                          <th className="p-3">Fecha Pago</th>
-                          <th className="p-3 text-right">Saldo Inicio</th>
-                          <th className="p-3 text-right">Costos Asoc.</th>
-                          <th className="p-3 text-right">Capital</th>
-                          <th className="p-3 text-right">Interés</th>
-                          <th className="p-3 text-right">Mora</th>
-                          <th className="p-3 text-right">Vr. Cuota</th>
-                          <th className="p-3 text-right">Saldo Final</th>
-                          <th className="p-3 text-center">Estado</th>
-                          <th className="p-3 text-center">Acción</th>
+                          <th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th>
+                          <th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th>
+                          <th className="p-3 text-right">Mora</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th>
+                          <th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
                         {(() => {
+                          let tempBal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+                          return loanInstallments.filter(i => i.status !== 'PAID_EARLY').map((inst, index) => {
+                            const si = tempBal;
+                            let sf = Math.max(si
