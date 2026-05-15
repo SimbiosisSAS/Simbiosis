@@ -393,7 +393,6 @@ const calculatePazYSalvo = () => {
 
   setShowPazYSalvoModal(true);
 };
-};
 const generarEstadoCuenta = () => {
   if (!selectedLoan || loanInstallments.length === 0) return;
 
