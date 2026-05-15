@@ -177,6 +177,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     });
   };
 
+  // --- CONEXIÓN A SUPABASE REPARADA ---
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
@@ -184,15 +185,13 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
       const { data: loanData, error: loanError } = await supabase.from('active_loans').insert({
         loan_number: params.loanNumber || null,
         client_name: params.clientName,
-        client_id_number: params.clientId, // <-- ESTA ES LA CORRECCIÓN CLAVE
-        principal_amount: params.principalAmount,
+        client_id_number: params.clientId,
+        loan_amount: params.principalAmount, // <-- Supabase V2 espera loan_amount
         origination_costs: params.originationCosts,
         disbursement_date: params.disbursementDate,
-        nominal_rate_mv: params.nominalRateMV,
-        term_months: params.termMonths,
-        monthly_payment: result.monthlyPayment,
-        total_payment: result.totalPayment,
-        tir: result.tir,
+        interest_rate_monthly: params.nominalRateMV, // <-- Supabase V2 espera interest_rate_monthly
+        installments: params.termMonths, // <-- Supabase V2 espera installments
+        fixed_quota_amount: result.monthlyPayment,
         status: 'ACTIVE'
       }).select().single();
 
