@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Calculator, FileDown, Rocket, TrendingUp, DollarSign, Percent, Calendar, User, Hash, ChevronDown, ChevronUp, FileDigit } from 'lucide-react';
+import { Calculator, FileDown, Rocket, TrendingUp, DollarSign, Percent, Calendar, User, Hash, ChevronDown, ChevronUp, Mail, Phone, Image as ImageIcon } from 'lucide-react';
 
 interface AmortizationRow {
   installmentNumber: number;
@@ -14,7 +14,6 @@ interface AmortizationRow {
 }
 
 interface LoanParams {
-  loanNumber: string;
   clientName: string;
   clientId: string;
   principalAmount: number;
@@ -81,17 +80,12 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
   const r = nominalRateMV / 100;
   const n = termMonths;
-  
-  // EL CAMBIO CLAVE: El monto a financiar (sobre el que se calcula todo) INCLUYE los costos.
-  const amountToFinance = principalAmount + originationCosts;
+  const P = principalAmount;
 
-  // Calculamos la cuota fija mensual sobre el TOTAL financiado
-  const fixedPayment = amountToFinance * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+  const fixedPayment = P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
 
   const rows: AmortizationRow[] = [];
-  
-  // El balance arranca en el monto total financiado
-  let balance = amountToFinance;
+  let balance = P;
   const startDate = new Date(disbursementDate + 'T00:00:00');
 
   for (let i = 1; i <= n; i++) {
@@ -100,15 +94,13 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
     const interestPortion = balance * r;
     let principalPortion = fixedPayment - interestPortion;
-    
-    // Los costos solo se muestran visualmente en la cuota 1, pero ya están financiados en el saldo
     const costs = i === 1 ? originationCosts : 0;
 
     if (i === n) {
-      principalPortion = balance; // Ajuste final por decimales
+      principalPortion = balance;
     }
 
-    const totalPaymentForPeriod = fixedPayment; // La cuota ya es igual todos los meses
+    const totalPaymentForPeriod = fixedPayment + costs;
     const closingBalance = i === n ? 0 : Math.max(0, balance - principalPortion);
 
     rows.push({
@@ -126,8 +118,6 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   }
 
   const totalPayment = rows.reduce((sum, row) => sum + row.paymentAmount, 0);
-  
-  // La TIR se calcula sobre lo que realmente le entregaste al cliente (principalAmount)
   const tir = calculateTIR(principalAmount, originationCosts, fixedPayment, termMonths);
 
   return {
@@ -138,9 +128,9 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   };
 }
 
-export default function LoanOriginationEngine() {
+// --- ACTUALIZACIÓN: Recibimos prefillData ---
+export default function LoanOriginationEngine({ prefillData }: { prefillData?: any }) {
   const [params, setParams] = useState<LoanParams>({
-    loanNumber: '',
     clientName: '',
     clientId: '',
     principalAmount: 0,
@@ -155,35 +145,17 @@ export default function LoanOriginationEngine() {
   const [activating, setActivating] = useState(false);
   const [activateSuccess, setActivateSuccess] = useState(false);
 
+  // --- LÓGICA DE PRE-LLENADO ---
   useEffect(() => {
-    const fetchNextLoanNumber = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('active_loans')
-          .select('loan_number')
-          .not('loan_number', 'is', null);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          const numbers = data
-            .map(row => parseInt(row.loan_number.replace(/\D/g, ''), 10))
-            .filter(n => !isNaN(n));
-          
-          if (numbers.length > 0) {
-            const maxNumber = Math.max(...numbers);
-            setParams(p => ({ ...p, loanNumber: (maxNumber + 1).toString() }));
-            return;
-          }
-        }
-        setParams(p => ({ ...p, loanNumber: '1' }));
-      } catch (err) {
-        console.error('Error buscando número de crédito:', err);
-      }
-    };
-
-    fetchNextLoanNumber();
-  }, []);
+    if (prefillData && prefillData.id_number) {
+      setParams(p => ({
+        ...p,
+        clientName: `${prefillData.first_name} ${prefillData.last_name}`,
+        clientId: prefillData.id_number,
+        principalAmount: Number(prefillData.credit_amount) || 0
+      }));
+    }
+  }, [prefillData]);
 
   const result = useMemo(() => {
     if (!isCalculated) return null;
@@ -206,7 +178,6 @@ export default function LoanOriginationEngine() {
     setShowFullTable(false);
     setActivateSuccess(false);
     setParams({
-      loanNumber: params.loanNumber, 
       clientName: '',
       clientId: '',
       principalAmount: 0,
@@ -220,34 +191,23 @@ export default function LoanOriginationEngine() {
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
-    
     try {
-      // 1. Guardar el crédito maestro con los nombres de columnas de Supabase exactamente alineados
-      const { data: loanData, error: loanError } = await supabase
-        .from('active_loans')
-        .insert({
-          loan_number: params.loanNumber || null,
-          client_name: params.clientName,
-          client_id_number: params.clientId,
-          loan_amount: params.principalAmount,            // CORREGIDO PARA BD
-          associated_costs: params.originationCosts,      // CORREGIDO PARA BD
-          disbursement_date: params.disbursementDate,
-          interest_rate_monthly: params.nominalRateMV,    // CORREGIDO PARA BD
-          installments: params.termMonths,                // CORREGIDO PARA BD
-          fixed_quota_amount: result.monthlyPayment,
-          total_payment: result.totalPayment,
-          tir: result.tir,
-          status: 'ACTIVE'
-        })
-        .select()
-        .single();
+      const { data: loanData, error: loanError } = await supabase.from('active_loans').insert({
+        client_name: params.clientName,
+        client_id_number: params.clientId,
+        principal_amount: params.principalAmount,
+        origination_costs: params.originationCosts,
+        disbursement_date: params.disbursementDate,
+        nominal_rate_mv: params.nominalRateMV,
+        term_months: params.termMonths,
+        monthly_payment: result.monthlyPayment,
+        total_payment: result.totalPayment,
+        tir: result.tir,
+        status: 'ACTIVE'
+      }).select().single();
+      
+      if (loanError) throw loanError;
 
-      if (loanError) {
-        console.error("Detalle del error Supabase:", loanError);
-        throw new Error(loanError.message);
-      }
-
-      // 2. Guardar las cuotas individuales
       const installmentsToInsert = result.rows.map(row => {
         const paymentDate = new Date(params.disbursementDate);
         paymentDate.setMonth(paymentDate.getMonth() + row.installmentNumber);
@@ -263,22 +223,13 @@ export default function LoanOriginationEngine() {
         };
       });
 
-      const { error: installmentsError } = await supabase
-        .from('loan_installments')
-        .insert(installmentsToInsert);
-
+      const { error: installmentsError } = await supabase.from('loan_installments').insert(installmentsToInsert);
       if (installmentsError) throw installmentsError;
 
       setActivateSuccess(true);
-      alert('¡Crédito activado y plan de pagos guardado exitosamente!');
-      
-      const currentNum = parseInt(params.loanNumber.replace(/\D/g, ''), 10);
-      if (!isNaN(currentNum)) {
-        setParams(p => ({ ...p, loanNumber: (currentNum + 1).toString() }));
-      }
-      
+      alert('¡Crédito activado y guardado en la cartera exitosamente!');
     } catch (err: any) {
-      console.error('Error activando el crédito:', err);
+      console.error('Error activating loan:', err);
       alert('Hubo un error al guardar: ' + err.message);
     } finally {
       setActivating(false);
@@ -286,7 +237,7 @@ export default function LoanOriginationEngine() {
   };
 
   const handleExportPDF = () => {
-    alert('Funcionalidad de exportación a PDF en desarrollo. El plan de amortización estará disponible para descarga pronto.');
+    alert('Funcionalidad de exportacion a PDF en desarrollo. El plan de amortizacion estara disponible para descarga pronto.');
   };
 
   const isValid = params.clientName && params.clientId && params.principalAmount > 0 && params.nominalRateMV > 0 && params.termMonths > 0 && params.disbursementDate;
@@ -299,33 +250,62 @@ export default function LoanOriginationEngine() {
       {/* Split Screen: Input + Projection */}
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Left Panel - Input Parameters */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* NUEVO BLOQUE: Muestra los datos de contacto y fotos del lead aprobado */}
+          {prefillData && (
+            <div className="bg-slate-800/40 border border-emerald-500/30 rounded-2xl p-6 shadow-lg shadow-emerald-500/5">
+              <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-2">
+                <User size={16} /> Datos de la Solicitud
+              </h3>
+              
+              <div className="space-y-3 mb-5">
+                <p className="text-sm flex items-center gap-2 text-slate-300">
+                  <Mail size={14} className="text-slate-500" /> {prefillData.email}
+                </p>
+                <p className="text-sm flex items-center gap-2 text-slate-300">
+                  <Phone size={14} className="text-slate-500" /> {prefillData.phone}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Documentos Adjuntos</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {prefillData.id_front_image && (
+                    <a href={prefillData.id_front_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                      <ImageIcon size={16} className="text-emerald-500 mb-1" />
+                      <span className="text-[10px] text-slate-400 text-center">Cédula<br/>Frontal</span>
+                    </a>
+                  )}
+                  {prefillData.id_back_image && (
+                    <a href={prefillData.id_back_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                      <ImageIcon size={16} className="text-emerald-500 mb-1" />
+                      <span className="text-[10px] text-slate-400 text-center">Cédula<br/>Reverso</span>
+                    </a>
+                  )}
+                  {prefillData.selfie_image && (
+                    <a href={prefillData.selfie_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                      <User size={16} className="text-emerald-500 mb-1" />
+                      <span className="text-[10px] text-slate-400 text-center">Foto<br/>Selfie</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-9 h-9 bg-emerald-500/15 rounded-lg flex items-center justify-center">
                 <Calculator className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Parámetros del Crédito</h3>
-                <p className="text-xs text-slate-500">Configura las variables del préstamo</p>
+                <h3 className="text-sm font-bold text-slate-200">Parametros del Credito</h3>
+                <p className="text-xs text-slate-500">Configura las variables del prestamo</p>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className={labelClass}>
-                  <FileDigit className="w-3 h-3 inline mr-1" />
-                  Número de Crédito
-                </label>
-                <input
-                  type="text"
-                  value={params.loanNumber}
-                  onChange={(e) => setParams(p => ({ ...p, loanNumber: e.target.value }))}
-                  className={`${inputClass} font-mono text-emerald-400`}
-                  placeholder="Ej: 52"
-                />
-              </div>
-
               <div>
                 <label className={labelClass}>
                   <User className="w-3 h-3 inline mr-1" />
@@ -343,14 +323,14 @@ export default function LoanOriginationEngine() {
               <div>
                 <label className={labelClass}>
                   <Hash className="w-3 h-3 inline mr-1" />
-                  Identificación
+                  Identificacion
                 </label>
                 <input
                   type="text"
                   value={params.clientId}
                   onChange={(e) => setParams(p => ({ ...p, clientId: e.target.value }))}
                   className={inputClass}
-                  placeholder="Cédula o NIT"
+                  placeholder="Cedula o NIT"
                 />
               </div>
 
@@ -372,7 +352,7 @@ export default function LoanOriginationEngine() {
               <div>
                 <label className={labelClass}>
                   <DollarSign className="w-3 h-3 inline mr-1" />
-                  Costos de Originación (COP)
+                  Costos de Originacion (COP)
                 </label>
                 <input
                   type="number"
@@ -458,8 +438,8 @@ export default function LoanOriginationEngine() {
                 <TrendingUp className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Proyección en Vivo</h3>
-                <p className="text-xs text-slate-500">Resumen del plan de amortización</p>
+                <h3 className="text-sm font-bold text-slate-200">Proyeccion en Vivo</h3>
+                <p className="text-xs text-slate-500">Resumen del plan de amortizacion</p>
               </div>
             </div>
 
@@ -468,8 +448,8 @@ export default function LoanOriginationEngine() {
                 <div className="w-16 h-16 bg-slate-700/30 rounded-2xl flex items-center justify-center mb-4">
                   <Calculator className="w-8 h-8 text-slate-600" />
                 </div>
-                <p className="text-slate-500 text-sm">Configura los parámetros y presiona</p>
-                <p className="text-slate-500 text-sm">"Calcular Plan" para ver la proyección</p>
+                <p className="text-slate-500 text-sm">Configura los parametros y presiona</p>
+                <p className="text-slate-500 text-sm">"Calcular Plan" para ver la proyeccion</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -505,7 +485,7 @@ export default function LoanOriginationEngine() {
                     </p>
                   </div>
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Costos Originación</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Costos Originacion</p>
                     <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">
                       {formatCurrency(params.originationCosts)}
                     </p>
@@ -523,6 +503,7 @@ export default function LoanOriginationEngine() {
                   </div>
                 </div>
 
+                {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">
                   <button
                     onClick={handleExportPDF}
@@ -537,7 +518,7 @@ export default function LoanOriginationEngine() {
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Rocket className="w-4 h-4" />
-                    {activating ? 'Activando...' : activateSuccess ? 'Crédito Activado' : 'Activar Crédito'}
+                    {activating ? 'Activando...' : activateSuccess ? 'Credito Activado' : 'Activar Credito'}
                   </button>
                 </div>
               </div>
@@ -548,7 +529,7 @@ export default function LoanOriginationEngine() {
 
       {/* Amortization Table */}
       {result && (
-        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden mt-6">
+        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
           <div
             className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
             onClick={() => setShowFullTable(!showFullTable)}
@@ -558,11 +539,15 @@ export default function LoanOriginationEngine() {
                 <Calculator className="w-4 h-4 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Tabla de Amortización - Sistema Francés</h3>
+                <h3 className="text-sm font-bold text-slate-200">Tabla de Amortizacion - Sistema Frances</h3>
                 <p className="text-xs text-slate-500">{result.rows.length} cuotas | Cuota fija: {formatCurrency(result.monthlyPayment)}</p>
               </div>
             </div>
-            {showFullTable ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+            {showFullTable ? (
+              <ChevronUp className="w-5 h-5 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-400" />
+            )}
           </div>
 
           {(showFullTable ? result.rows : result.rows.slice(0, 5)).length > 0 && (
@@ -575,7 +560,7 @@ export default function LoanOriginationEngine() {
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Costos Asociados</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Inicio</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Capital</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Interés</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Interes</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Vr. Cuota</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Final</th>
                   </tr>
@@ -618,6 +603,17 @@ export default function LoanOriginationEngine() {
                   </tfoot>
                 )}
               </table>
+            </div>
+          )}
+
+          {!showFullTable && result.rows.length > 5 && (
+            <div className="px-6 py-3 border-t border-slate-700/30">
+              <button
+                onClick={() => setShowFullTable(true)}
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+              >
+                Ver las {result.rows.length} cuotas completas
+              </button>
             </div>
           )}
         </div>
