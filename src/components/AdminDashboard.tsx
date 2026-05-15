@@ -429,8 +429,27 @@ if (abonoCapitalExtra > 0) {
   };
 
   const updateStatus = async (appId: string, newStatus: string) => {
-    const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
-    if (!error) { fetchApplications(); setSelectedApp(null); }
+    try {
+      const { error } = await supabase
+        .from('credit_applications')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', appId);
+        
+      if (error) throw error;
+      
+      await fetchApplications(); // Recarga la tabla de solicitudes
+      
+      if (newStatus === 'APPROVED' && selectedApp) {
+        setDataForSimulator(selectedApp); // Guarda los datos del cliente
+        setSelectedApp(null); // Cierra el panel de detalles
+        setActiveTab('simulador'); // Salta a la pestaña del simulador
+        window.scrollTo({ top: 0, behavior: 'smooth' }); // Sube la pantalla
+      } else {
+        setSelectedApp(null); // Si rechaza, solo cierra el panel
+      }
+    } catch (err: any) {
+      alert('Error actualizando estado: ' + err.message);
+    }
   };
 
   const formatCurrency = (val: any) => {
