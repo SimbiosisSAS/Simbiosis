@@ -1,20 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import {
-  Eye,
-  Sparkles,
-  FileText,
-  Calculator,
-  LogOut,
-  Wallet,
-  DollarSign,
-  Calendar,
-  Download,
-  Settings,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2 } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador' | 'configuracion';
@@ -24,19 +11,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [applications, setApplications] = useState<CreditApplication[]>([]);
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
-  const [newRate, setNewRate] = useState({
-    month: new Date().getMonth() + 1,
-    year: new Date().getFullYear(),
-    rate: '',
-  });
-
+  const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
-
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -47,24 +27,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     extraPaymentType: 'REDUCE_TIME',
   });
 
+  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
   useEffect(() => {
     if (activeTab === 'solicitudes') fetchApplications();
-    else if (activeTab === 'cartera') {
-      fetchActiveLoans();
-      setSelectedLoan(null);
-    } else if (activeTab === 'configuracion') fetchUsuryRates();
+    else if (activeTab === 'cartera') { fetchActiveLoans(); setSelectedLoan(null); }
+    else if (activeTab === 'configuracion') fetchUsuryRates();
   }, [filterStatus, activeTab]);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // FETCH FUNCTIONS
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const fetchApplications = async () => {
     setLoading(true);
-    let query = supabase
-      .from('credit_applications')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let query = supabase.from('credit_applications').select('*').order('created_at', { ascending: false });
     if (filterStatus !== 'ALL') query = query.eq('status', filterStatus);
     const { data, error } = await query;
     if (!error) setApplications(data || []);
@@ -73,429 +46,194 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const fetchActiveLoans = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('active_loans')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('active_loans').select('*').order('created_at', { ascending: false });
     if (!error) setActiveLoans(data || []);
     setLoading(false);
   };
 
   const fetchInstallments = async (loanId: string) => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('loan_installments')
-      .select('*')
-      .eq('loan_id', loanId)
-      .order('installment_number', { ascending: true });
+    const { data, error } = await supabase.from('loan_installments').select('*').eq('loan_id', loanId).order('installment_number', { ascending: true });
     if (!error) setLoanInstallments(data || []);
     setLoading(false);
   };
 
   const fetchUsuryRates = async () => {
-    const { data, error } = await supabase
-      .from('usury_rates')
-      .select('*')
-      .order('period_year', { ascending: false })
-      .order('period_month', { ascending: false });
+    const { data, error } = await supabase.from('usury_rates').select('*').order('period_year', { ascending: false }).order('period_month', { ascending: false });
     if (!error) setUsuryRates(data || []);
   };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // USURY RATES
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const handleAddUsuryRate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const { error } = await supabase.from('usury_rates').upsert(
-        {
-          period_month: newRate.month,
-          period_year: newRate.year,
-          daily_late_rate: Number(newRate.rate),
-        },
+        { period_month: newRate.month, period_year: newRate.year, daily_late_rate: Number(newRate.rate) },
         { onConflict: 'period_month,period_year' }
       );
       if (error) throw error;
       alert('Tasa guardada exitosamente');
       fetchUsuryRates();
       setNewRate({ ...newRate, rate: '' });
-    } catch (err: any) {
-      alert('Error guardando tasa. Detalle: ' + err.message);
-    }
+    } catch (err: any) { alert('Error guardando tasa. Detalle: ' + err.message); }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // LOAN MANAGEMENT
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const handleSelectLoan = (loan: any) => {
-    setSelectedLoan(loan);
-    fetchInstallments(loan.id);
-  };
+  const handleSelectLoan = (loan: any) => { setSelectedLoan(loan); fetchInstallments(loan.id); };
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    const confirmDelete = window.confirm(
-      `¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`
-    );
-    if (confirmDelete) {
-      try {
-        const { error } = await supabase
-          .from('active_loans')
-          .delete()
-          .eq('id', selectedLoan.id);
-        if (error) throw error;
-        alert('Crédito eliminado exitosamente');
-        setSelectedLoan(null);
-        fetchActiveLoans();
-      } catch (err: any) {
-        alert('Error al eliminar el crédito: ' + err.message);
-      }
-    }
+    if (!window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? No se puede deshacer.`)) return;
+    try {
+      const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+      if (error) throw error;
+      alert('Crédito eliminado exitosamente');
+      setSelectedLoan(null);
+      fetchActiveLoans();
+    } catch (err: any) { alert('Error al eliminar el crédito: ' + err.message); }
   };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // APPLICATION STATUS
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const updateStatus = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
-      const { error } = await supabase
-        .from('credit_applications')
-        .update({ status })
-        .eq('id', id);
+      const { error } = await supabase.from('credit_applications').update({ status }).eq('id', id);
       if (error) throw error;
       alert(`Solicitud ${status === 'APPROVED' ? 'aprobada' : 'rechazada'} exitosamente.`);
       fetchApplications();
       setSelectedApp(null);
-    } catch (err: any) {
-      alert('Error actualizando estado: ' + err.message);
-    }
+    } catch (err: any) { alert('Error actualizando estado: ' + err.message); }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // LATE FEE CALCULATION
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const calculateLateFee = (
-    expectedDateStr: string,
-    actualDateStr: string,
-    amount: number
-  ) => {
+  const calculateLateFee = (expectedDateStr: string, actualDateStr: string, amount: number) => {
     const expected = new Date(expectedDateStr);
     const actual = new Date(actualDateStr);
     expected.setHours(0, 0, 0, 0);
     actual.setHours(0, 0, 0, 0);
-
-    const diffTime = actual.getTime() - expected.getTime();
-    const totalDaysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
+    const totalDaysLate = Math.ceil((actual.getTime() - expected.getTime()) / (1000 * 60 * 60 * 24));
     if (totalDaysLate <= 0) return { days: 0, penalty: 0 };
-
     let penalty = 0;
     for (let i = 1; i <= totalDaysLate; i++) {
-      const currentLateDay = new Date(expected.getTime());
-      currentLateDay.setDate(expected.getDate() + i);
-      const currentMonth = currentLateDay.getMonth() + 1;
-      const currentYear = currentLateDay.getFullYear();
-      const rateRecord = usuryRates.find(
-        (r) => r.period_month === currentMonth && r.period_year === currentYear
-      );
-      const dailyRate = rateRecord ? Number(rateRecord.daily_late_rate) : 0;
-      penalty += amount * dailyRate;
+      const d = new Date(expected.getTime());
+      d.setDate(expected.getDate() + i);
+      const rec = usuryRates.find(r => r.period_month === d.getMonth() + 1 && r.period_year === d.getFullYear());
+      penalty += amount * (rec ? Number(rec.daily_late_rate) : 0);
     }
     return { days: totalDaysLate, penalty: Math.round(penalty) };
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PAYMENT MODAL
-  // ─────────────────────────────────────────────────────────────────────────────
-
   const openPaymentModal = (installment: any) => {
     const today = new Date().toISOString().split('T')[0];
-    const moraCalc = calculateLateFee(
-      installment.expected_payment_date,
-      today,
-      installment.expected_amount
-    );
+    const moraCalc = calculateLateFee(installment.expected_payment_date, today, installment.expected_amount);
     setSelectedInstallment(installment);
-    setPaymentData({
-      actualDate: today,
-      lateFee: moraCalc.penalty,
-      daysLate: moraCalc.days,
-      actualAmount: Number(installment.expected_amount) + moraCalc.penalty,
-      extraPaymentType: 'REDUCE_TIME',
-    });
+    setPaymentData({ actualDate: today, lateFee: moraCalc.penalty, daysLate: moraCalc.days, actualAmount: Number(installment.expected_amount) + moraCalc.penalty, extraPaymentType: 'REDUCE_TIME' });
     setShowPaymentModal(true);
   };
 
   const handleDateChangeInModal = (newDate: string) => {
     if (!selectedInstallment) return;
-    const moraCalc = calculateLateFee(
-      selectedInstallment.expected_payment_date,
-      newDate,
-      selectedInstallment.expected_amount
-    );
-    setPaymentData((prev) => ({
-      ...prev,
-      actualDate: newDate,
-      lateFee: moraCalc.penalty,
-      daysLate: moraCalc.days,
-      actualAmount: Number(selectedInstallment.expected_amount) + moraCalc.penalty,
-    }));
+    const moraCalc = calculateLateFee(selectedInstallment.expected_payment_date, newDate, selectedInstallment.expected_amount);
+    setPaymentData(prev => ({ ...prev, actualDate: newDate, lateFee: moraCalc.penalty, daysLate: moraCalc.days, actualAmount: Number(selectedInstallment.expected_amount) + moraCalc.penalty }));
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // HELPER: DETECTAR TASA DEL CRÉDITO
-  // ─────────────────────────────────────────────────────────────────────────────
-
+  // ── HELPER: DETECTAR TASA ────────────────────────────────────────────────────
   const getLoanRate = (loan: any, installments: any[]): number => {
-    const rateRaw =
-      loan.interest_rate_monthly ??
-      loan.nominal_rate_mv ??
-      null;
-
+    const rateRaw = loan.interest_rate_monthly ?? loan.nominal_rate_mv ?? null;
     let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
-
-    // Fallback: derivar la tasa del interés de la primera cuota
     if (!rate || rate <= 0) {
-      const primerasCuotas = installments.filter((i) => i.installment_number === 1);
-      const principalAmount = Number(loan.principal_amount || loan.loan_amount);
-      if (primerasCuotas.length > 0 && principalAmount > 0) {
-        rate = Number(primerasCuotas[0].interest_portion) / principalAmount;
-        console.warn(`Tasa derivada de cuota 1: ${(rate * 100).toFixed(4)}% MV`);
-      }
+      const primera = installments.find(i => i.installment_number === 1);
+      const principal = Number(loan.principal_amount || loan.loan_amount);
+      if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
     }
-
     return rate;
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // RECALCULATE FUTURE INSTALLMENTS
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const recalculateFutureInstallments = async (
-    excedenteCapital: number,
-    strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA'
-  ) => {
+  // ── RECALCULAR CUOTAS FUTURAS (ABONO EXTRA) ──────────────────────────────────
+  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
 
     const futureInstallments = loanInstallments
-      .filter(
-        (i) =>
-          i.installment_number > selectedInstallment.installment_number &&
-          i.status === 'PENDING'
-      )
+      .filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING')
       .sort((a, b) => a.installment_number - b.installment_number);
 
     if (futureInstallments.length === 0) return;
 
-    const saldoPendienteAnterior = futureInstallments.reduce(
-      (sum, i) => sum + Number(i.principal_portion),
-      0
-    );
-
-    let newBalance = saldoPendienteAnterior - excedenteCapital;
-    if (newBalance < 0) newBalance = 0;
+    const saldoPendiente = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    let newBalance = Math.max(saldoPendiente - excedenteCapital, 0);
 
     const rate = getLoanRate(selectedLoan, loanInstallments);
+    if (!rate || rate <= 0) { alert('Error crítico: No se pudo determinar la tasa del crédito.'); return; }
 
-    if (!rate || rate <= 0) {
-      alert('Error crítico: No se pudo determinar la tasa del crédito. Verifica el campo interest_rate_monthly en Supabase.');
-      return;
-    }
-
-    const updates: {
-      id: string;
-      expected_amount: number;
-      principal_portion: number;
-      interest_portion: number;
-      status: string;
-    }[] = [];
-
+    const updates: any[] = [];
     let currentBalance = newBalance;
 
-    // ── REDUCE_QUOTA ────────────────────────────────────────────────────────
     if (strategy === 'REDUCE_QUOTA') {
       const n = futureInstallments.length;
-      const newFixedQuota =
-        currentBalance <= 0
-          ? 0
-          : (currentBalance * (rate * Math.pow(1 + rate, n))) /
-            (Math.pow(1 + rate, n) - 1);
-
+      const newFixedQuota = currentBalance <= 0 ? 0 : (currentBalance * (rate * Math.pow(1 + rate, n))) / (Math.pow(1 + rate, n) - 1);
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
-
-        if (currentBalance <= 0.5) {
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
+        if (currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
         const interest = Math.round(currentBalance * rate);
         let principal = Math.round(newFixedQuota) - interest;
-
-        if (principal >= currentBalance || i === futureInstallments.length - 1) {
-          principal = Math.round(currentBalance);
-        }
+        if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
         if (principal < 0) principal = 0;
-
-        updates.push({
-          id: inst.id,
-          expected_amount: principal + interest,
-          principal_portion: principal,
-          interest_portion: interest,
-          status: 'PENDING',
-        });
-
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
         currentBalance = Math.round(currentBalance - principal);
       }
-
-    // ── REDUCE_TIME ─────────────────────────────────────────────────────────
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-
-      if (!fixedQuota || fixedQuota <= 0) {
-        alert('Error: El monto de cuota fija del crédito es inválido. Verifica fixed_quota_amount en Supabase.');
-        return;
-      }
-
+      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida. Verifica fixed_quota_amount en Supabase.'); return; }
       let balanceFinished = false;
-
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
-
-        if (balanceFinished || currentBalance <= 0.5) {
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
+        if (balanceFinished || currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
         const interest = Math.round(currentBalance * rate);
         let principal = fixedQuota - interest;
-
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
-          updates.push({
-            id: inst.id,
-            expected_amount: principal + interest,
-            principal_portion: principal,
-            interest_portion: interest,
-            status: 'PENDING',
-          });
-          currentBalance = 0;
-          balanceFinished = true;
-          continue;
+          updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+          currentBalance = 0; balanceFinished = true; continue;
         }
-
         principal = Math.round(principal);
         currentBalance = Math.round(currentBalance - principal);
-
-        updates.push({
-          id: inst.id,
-          expected_amount: principal + interest,
-          principal_portion: principal,
-          interest_portion: interest,
-          status: 'PENDING',
-        });
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
       }
     }
 
-    for (const update of updates) {
-      const { error } = await supabase
-        .from('loan_installments')
-        .update({
-          expected_amount: update.expected_amount,
-          principal_portion: update.principal_portion,
-          interest_portion: update.interest_portion,
-          status: update.status,
-        })
-        .eq('id', update.id);
-      if (error) console.error(`Error actualizando cuota ${update.id}:`, error.message);
+    for (const u of updates) {
+      await supabase.from('loan_installments').update({ expected_amount: u.expected_amount, principal_portion: u.principal_portion, interest_portion: u.interest_portion, status: u.status }).eq('id', u.id);
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // REPAIR FULL SCHEDULE — RECALCULAR PLAN DESDE SALDO ACTUAL
-  // ─────────────────────────────────────────────────────────────────────────────
-
+  // ── RECALCULAR PLAN COMPLETO DESDE SALDO ACTUAL ───────────────────────────────
   const repairFullSchedule = async () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-
-    const confirmed = window.confirm(
-      `¿Recalcular todas las cuotas PENDIENTES del crédito de ${selectedLoan.client_name} desde el saldo actual?\n\nEsto corrige cualquier error en el plan de pagos existente.`
-    );
-    if (!confirmed) return;
+    if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES del crédito de ${selectedLoan.client_name} desde el saldo actual?\n\nEsto corrige cualquier error en el plan de pagos existente.`)) return;
 
     const rate = getLoanRate(selectedLoan, loanInstallments);
-
-    if (!rate || rate <= 0) {
-      alert('Error: No se pudo determinar la tasa del crédito.');
-      return;
-    }
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa del crédito.'); return; }
 
     const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-    if (!fixedQuota || fixedQuota <= 0) {
-      alert('Error: No se pudo determinar la cuota fija del crédito.');
-      return;
-    }
+    if (!fixedQuota || fixedQuota <= 0) { alert('Error: No se pudo determinar la cuota fija del crédito.'); return; }
 
-    const pendingInstallments = loanInstallments
-      .filter((i) => i.status === 'PENDING')
-      .sort((a, b) => a.installment_number - b.installment_number);
+    const pendingInstallments = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
+    if (pendingInstallments.length === 0) { alert('No hay cuotas pendientes para recalcular.'); return; }
 
-    if (pendingInstallments.length === 0) {
-      alert('No hay cuotas pendientes para recalcular.');
-      return;
-    }
-
-    // Saldo actual real = capital original - capital ya pagado (incluye abonos extra)
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalYaPagado = loanInstallments
-      .filter((i) => i.status === 'PAID' || i.status === 'LATE')
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-
-    let currentBalance = capitalOriginal - capitalYaPagado;
-    if (currentBalance < 0) currentBalance = 0;
+    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    let currentBalance = Math.max(capitalOriginal - capitalYaPagado, 0);
 
     for (let i = 0; i < pendingInstallments.length; i++) {
       const inst = pendingInstallments[i];
-
       if (currentBalance <= 0.5) {
-        await supabase.from('loan_installments').update({
-          expected_amount: 0,
-          principal_portion: 0,
-          interest_portion: 0,
-          status: 'PAID_EARLY',
-        }).eq('id', inst.id);
+        await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id);
         continue;
       }
-
       const interest = Math.round(currentBalance * rate);
       let principal = fixedQuota - interest;
-
-      // Cuota de cierre: saldar exactamente lo que queda
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').update({
-          expected_amount: principal + interest,
-          principal_portion: principal,
-          interest_portion: interest,
-          status: 'PENDING',
-        }).eq('id', inst.id);
-        currentBalance = 0;
-        continue;
+        await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
+        currentBalance = 0; continue;
       }
-
       principal = Math.round(principal);
-
-      await supabase.from('loan_installments').update({
-        expected_amount: principal + interest,
-        principal_portion: principal,
-        interest_portion: interest,
-        status: 'PENDING',
-      }).eq('id', inst.id);
-
+      await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
       currentBalance = Math.round(currentBalance - principal);
     }
 
@@ -503,50 +241,27 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     await fetchInstallments(selectedLoan.id);
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // REGISTER PAYMENT
-  // ─────────────────────────────────────────────────────────────────────────────
-
+  // ── REGISTRAR PAGO ────────────────────────────────────────────────────────────
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
-
     try {
-      const pagoReal =
-        parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g, '')) || 0;
-      const moraCobrada =
-        parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g, '')) || 0;
-      const cuotaBase =
-        parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')) || 0;
-
+      const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g, '')) || 0;
+      const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g, '')) || 0;
+      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')) || 0;
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
+      const abonoCapitalExtra = pagoReal - (cuotaBase + moraCobrada);
+      const nuevoPrincipal = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
-      const cobroObligatorio = cuotaBase + moraCobrada;
-      const abonoCapitalExtra = pagoReal - cobroObligatorio;
-
-      const nuevoPrincipalPagadoEstaCuota =
-        Number(selectedInstallment.principal_portion) +
-        (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
-
-      const { error } = await supabase
-        .from('loan_installments')
-        .update({
-          status: status,
-          actual_payment_date: paymentData.actualDate,
-          actual_amount_paid: pagoReal,
-          late_fee_charged: moraCobrada,
-          principal_portion: nuevoPrincipalPagadoEstaCuota,
-        })
-        .eq('id', selectedInstallment.id);
-
+      const { error } = await supabase.from('loan_installments').update({
+        status, actual_payment_date: paymentData.actualDate, actual_amount_paid: pagoReal,
+        late_fee_charged: moraCobrada, principal_portion: nuevoPrincipal,
+      }).eq('id', selectedInstallment.id);
       if (error) throw error;
 
       if (abonoCapitalExtra > 10) {
-        await recalculateFutureInstallments(
-          abonoCapitalExtra,
-          paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA'
-        );
-        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
+        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
+        alert(`¡Pago registrado! Abono extra de ${formatCurrency(abonoCapitalExtra)} aplicado.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -554,101 +269,52 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       setShowPaymentModal(false);
       setLoanInstallments([]);
       await fetchInstallments(selectedLoan.id);
-    } catch (err: any) {
-      alert('Error al registrar pago: ' + err.message);
-    }
+    } catch (err: any) { alert('Error al registrar pago: ' + err.message); }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // HELPER FUNCTIONS
-  // ─────────────────────────────────────────────────────────────────────────────
-
+  // ── HELPERS ───────────────────────────────────────────────────────────────────
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalYaPagado = loanInstallments
-      .filter((i) => i.status === 'PAID' || i.status === 'LATE')
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    const saldo = capitalOriginal - capitalYaPagado;
-    return saldo > 0 ? saldo : 0;
+    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    return Math.max(capitalOriginal - capitalYaPagado, 0);
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent =
-      'data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n';
-
-    let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-
-    loanInstallments.forEach((row, index) => {
-      if (row.status !== 'PAID_EARLY') {
-        const saldoInicio = tempBalanceForExcel;
-        const capitalRestar = Number(row.principal_portion);
-        let saldoFinal = saldoInicio - capitalRestar;
-        if (saldoFinal < 0) saldoFinal = 0;
-        tempBalanceForExcel = saldoFinal;
-
-        const costosAsociados =
-          index === 0
-            ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
-            : 0;
-        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
-
-        const rowData = [
-          row.installment_number,
-          row.expected_payment_date,
-          saldoInicio,
-          costosAsociados,
-          row.principal_portion,
-          row.interest_portion,
-          row.late_fee_charged,
-          valorCuotaTotal,
-          saldoFinal,
-          row.status,
-          row.actual_payment_date || 'N/A',
-          row.actual_amount_paid,
-        ];
-        csvContent += rowData.join(',') + '\n';
-      }
+    let csv = 'data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n';
+    let bal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    loanInstallments.forEach((row, idx) => {
+      if (row.status === 'PAID_EARLY') return;
+      const saldoInicio = bal;
+      let saldoFinal = Math.max(saldoInicio - Number(row.principal_portion), 0);
+      bal = saldoFinal;
+      const costos = idx === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+      csv += [row.installment_number, row.expected_payment_date, saldoInicio, costos, row.principal_portion, row.interest_portion, row.late_fee_charged, Number(row.expected_amount) + costos, saldoFinal, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid].join(',') + '\n';
     });
-
-    const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', encodeURI(csv));
     link.setAttribute('download', `PlanPagos_${selectedLoan.client_name.replace(/ /g, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const formatCurrency = (val: any) => {
-    const num = Number(val);
-    if (isNaN(num)) return '$ 0';
-    return '$ ' + num.toLocaleString('es-CO');
-  };
+  const formatCurrency = (val: any) => { const n = Number(val); return isNaN(n) ? '$ 0' : '$ ' + n.toLocaleString('es-CO'); };
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PAID':
-        return <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">Al día</span>;
-      case 'LATE':
-        return <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">Mora</span>;
-      case 'PAID_EARLY':
-        return <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">Anulada</span>;
-      default:
-        return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">Pendiente</span>;
-    }
+    const map: any = {
+      PAID: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      LATE: 'bg-red-500/10 text-red-400 border-red-500/20',
+      PAID_EARLY: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    };
+    const labels: any = { PAID: 'Al día', LATE: 'Mora', PAID_EARLY: 'Anulada' };
+    const cls = map[status] || 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    const label = labels[status] || 'Pendiente';
+    return <span className={`px-2 py-1 ${cls} border rounded-full text-xs font-semibold`}>{label}</span>;
   };
-
-  const monthNames = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  ];
 
   // ─────────────────────────────────────────────────────────────────────────────
   // RENDER
   // ─────────────────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-slate-950 pb-12">
 
@@ -664,39 +330,15 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               <p className="text-xs text-slate-500">Simbiosis - Loan Management System</p>
             </div>
           </div>
-
           <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
-            <button
-              onClick={() => setActiveTab('solicitudes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'solicitudes' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <FileText className="w-4 h-4" /> Solicitudes Web
-            </button>
-            <button
-              onClick={() => setActiveTab('cartera')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'cartera' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <Wallet className="w-4 h-4" /> Cartera Activa
-            </button>
-            <button
-              onClick={() => setActiveTab('simulador')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'simulador' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <Calculator className="w-4 h-4" /> Nuevo Crédito
-            </button>
-            <button
-              onClick={() => setActiveTab('configuracion')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'configuracion' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <Settings className="w-4 h-4" /> Configuración
-            </button>
+            {([['solicitudes','Solicitudes Web', FileText],['cartera','Cartera Activa', Wallet],['simulador','Nuevo Crédito', Calculator],['configuracion','Configuración', Settings]] as any[]).map(([tab, label, Icon]) => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === tab ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}>
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            ))}
           </div>
-
           {onLogout && (
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-            >
+            <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10">
               <LogOut className="w-4 h-4" /> Cerrar
             </button>
           )}
@@ -705,7 +347,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       <div className="max-w-7xl mx-auto px-6 py-8">
 
-        {/* SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
         {/* CONFIGURACIÓN */}
@@ -713,80 +354,39 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-6">Tasas de Mora Diaria (Usura)</h2>
-              <form
-                onSubmit={handleAddUsuryRate}
-                className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8"
-              >
+              <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
-                  <select
-                    value={newRate.month}
-                    onChange={(e) => setNewRate({ ...newRate, month: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
-                  >
-                    {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>{m}</option>
-                    ))}
+                  <select value={newRate.month} onChange={e => setNewRate({ ...newRate, month: Number(e.target.value) })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500">
+                    {monthNames.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
                   </select>
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Año</label>
-                  <input
-                    type="number"
-                    value={newRate.year}
-                    onChange={(e) => setNewRate({ ...newRate, year: Number(e.target.value) })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
-                  />
+                  <input type="number" value={newRate.year} onChange={e => setNewRate({ ...newRate, year: Number(e.target.value) })} className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500" />
                 </div>
                 <div className="flex-[2]">
-                  <label className="block text-xs font-semibold text-emerald-400 uppercase mb-2">
-                    Tasa Diaria (Ej: 0.00062)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.000000001"
-                    required
-                    value={newRate.rate}
-                    onChange={(e) => setNewRate({ ...newRate, rate: e.target.value })}
-                    className="w-full bg-slate-800 border border-emerald-500/50 rounded-lg p-2.5 text-white font-mono outline-none focus:border-emerald-500"
-                    placeholder="0.00000"
-                  />
+                  <label className="block text-xs font-semibold text-emerald-400 uppercase mb-2">Tasa Diaria (Ej: 0.00062)</label>
+                  <input type="number" step="0.000000001" required value={newRate.rate} onChange={e => setNewRate({ ...newRate, rate: e.target.value })} className="w-full bg-slate-800 border border-emerald-500/50 rounded-lg p-2.5 text-white font-mono outline-none focus:border-emerald-500" placeholder="0.00000" />
                 </div>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors"
-                >
+                <button type="submit" className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-2 transition-colors">
                   <Plus size={18} /> Agregar
                 </button>
               </form>
-
               <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase border-b border-slate-700/50">
-                    <tr>
-                      <th className="p-4">Periodo</th>
-                      <th className="p-4 text-right">Tasa Diaria Registrada</th>
-                    </tr>
+                    <tr><th className="p-4">Periodo</th><th className="p-4 text-right">Tasa Diaria Registrada</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
-                    {usuryRates.length === 0 ? (
-                      <tr>
-                        <td colSpan={2} className="p-4 text-center text-slate-500">
-                          No hay tasas registradas. El sistema no cobrará mora.
-                        </td>
-                      </tr>
-                    ) : (
-                      usuryRates.map((rate) => (
-                        <tr key={rate.id} className="hover:bg-slate-800/50">
-                          <td className="p-4 text-slate-200 font-medium">
-                            {monthNames[rate.period_month - 1]} {rate.period_year}
-                          </td>
-                          <td className="p-4 text-emerald-400 font-mono text-right">
-                            {rate.daily_late_rate}
-                          </td>
+                    {usuryRates.length === 0
+                      ? <tr><td colSpan={2} className="p-4 text-center text-slate-500">No hay tasas registradas.</td></tr>
+                      : usuryRates.map(r => (
+                        <tr key={r.id} className="hover:bg-slate-800/50">
+                          <td className="p-4 text-slate-200 font-medium">{monthNames[r.period_month - 1]} {r.period_year}</td>
+                          <td className="p-4 text-emerald-400 font-mono text-right">{r.daily_late_rate}</td>
                         </tr>
-                      ))
-                    )}
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -798,7 +398,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
 
-            {/* LISTA DE CRÉDITOS */}
+            {/* LISTA */}
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
               <div className="p-6 border-b border-slate-700/50">
                 <h2 className="text-xl font-bold text-white mb-4">Créditos Otorgados</h2>
@@ -806,11 +406,109 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 flex justify-between">
                     <div>
                       <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Colocado</p>
-                      <p className="text-xl font-bold text-emerald-400 font-mono">
-                        {formatCurrency(activeLoans.reduce((sum, loan) => sum + Number(loan.principal_amount || loan.loan_amount), 0))}
-                      </p>
+                      <p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(activeLoans.reduce((s, l) => s + Number(l.principal_amount || l.loan_amount), 0))}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Créditos Activos</p>
                       <p className="text-xl font-bold text-slate-200 font-mono">{activeLoans.length}</p>
                     </div>
+                  </div>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50">
+                    <tr>
+                      <th className="p-4">Cliente</th>
+                      <th className="p-4 text-right">Monto</th>
+                      {!selectedLoan && <th className="p-4 text-center">Detalle</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/50">
+                    {activeLoans.map(loan => (
+                      <tr key={loan.id} onClick={() => handleSelectLoan(loan)} className={`cursor-pointer transition-colors ${selectedLoan?.id === loan.id ? 'bg-emerald-500/10 border-l-4 border-emerald-500' : 'hover:bg-slate-700/20'}`}>
+                        <td className="p-4">
+                          <p className="font-bold text-slate-200 text-sm truncate">{loan.client_name}</p>
+                          <p className="text-xs text-slate-500 font-mono">{loan.client_id_number || loan.client_id}</p>
+                        </td>
+                        <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(loan.principal_amount || loan.loan_amount)}</td>
+                        {!selectedLoan && <td className="p-4 text-center"><button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg"><Eye size={16} /></button></td>}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* DETALLE CRÉDITO */}
+            {selectedLoan && (
+              <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
+                <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
+                    <p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
+                      <Trash2 size={14} /> Eliminar
+                    </button>
+                    <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p>
+                    <p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.principal_amount || selectedLoan.loan_amount)}</p>
+                  </div>
+                  <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20">
+                    <p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p>
+                    <p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(calculateCurrentBalance())}</p>
+                  </div>
+                  <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 flex flex-col justify-center">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Estado de Cuotas</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-lg font-bold text-slate-300">{loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').length} pagadas</p>
+                      {loanInstallments.filter(i => i.status === 'PAID_EARLY').length > 0 && (
+                        <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">{loanInstallments.filter(i => i.status === 'PAID_EARLY').length} anuladas</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* BOTONES GESTIÓN */}
+                <div className="flex justify-between items-end mb-4">
+                  <h3 className="text-lg font-bold text-white">Gestión de Pagos</h3>
+                  <div className="flex gap-2">
+                    <button onClick={repairFullSchedule} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-amber-600/50 rounded-lg text-amber-400 hover:text-white hover:bg-amber-600 hover:border-amber-500 text-sm transition-colors">
+                      <Calculator size={14} /> Recalcular Plan
+                    </button>
+                    <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-emerald-500 text-sm transition-colors">
+                      <Download size={14} /> Exportar Excel
+                    </button>
+                  </div>
+                </div>
+
+                {/* TABLA DE CUOTAS */}
+                {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
+                  <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
+                        <tr>
+                          <th className="p-3">Cuota</th>
+                          <th className="p-3">Fecha Pago</th>
+                          <th className="p-3 text-right">Saldo Inicio</th>
+                          <th className="p-3 text-right">Costos Asoc.</th>
+                          <th className="p-3 text-right">Capital</th>
+                          <th className="p-3 text-right">Interés</th>
+                          <th className="p-3 text-right">Mora</th>
+                          <th className="p-3 text-right">Vr. Cuota</th>
+                          <th className="p-3 text-right">Saldo Final</th>
+                          <th className="p-3 text-center">Estado</th>
+                          <th className="p-3 text-center">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/50">
+                        {(() => {
