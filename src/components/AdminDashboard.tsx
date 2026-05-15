@@ -87,9 +87,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos.`);
-    
-    if (confirmDelete) {
+    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`)) {
       try {
         const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
         if (error) throw error;
@@ -154,58 +152,171 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- NUEVA LÓGICA DE REGISTRO DE PAGOS (LLAMANDO A SUPABASE) ---
+  // --- MATEMÁTICA BANCARIA REESCRITA (IDÉNTICA A TU EXCEL) ---
+  const recalculateFutureInstallments = async (saldoVivoRestante: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
+    if (!selectedLoan || !selectedInstallment) return;
+    
+    const futureInstallments = loanInstallments
+      .filter(i => i.installment_number > selectedInstallment.installment_number)
+      .sort((a, b) => a.installment_number - b.installment_number);
+      
+    if (futureInstallments.length === 0) return;
+
+    // PARTIMOS DEL SALDO VIVO REAL DESPUÉS DE ESTE PAGO (Ej: 9.100.000)
+    let currentBalance = saldoVivoRestante;
+    
+    const rate = Number(selectedLoan.nominal_rate_mv) / 100; // Ej: 0.01 (1%)
+    const remainingMonths = futureInstallments.length;
+
+    const updates = [];
+
+    if (strategy === 'REDUCE_QUOTA') {
+      // ESTRATEGIA: REDUCIR CUOTA (Recalcular monto fijo en base al nuevo saldo)
+      const newFixedQuota = currentBalance <= 0 ? 0 : currentBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        
+        if (currentBalance <= 0.5) {
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
+          continue;
+        }
+
+        const interest = currentBalance * rate;
+        let principal = newFixedQuota - interest;
+
+        if (i === futureInstallments.length - 1 || currentBalance < principal) principal = currentBalance;
+        
+        updates.push({
+          id: inst.id,
+          expected_amount: Math.round(principal + interest),
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest),
+          status: 'PENDING'
+        });
+        currentBalance -= principal;
+      }
+    } else {
+      // ESTRATEGIA: REDUCIR TIEMPO (PLAZO)
+      // La cuota fija (ej. 888.488) se mantiene sagrada e intocable
+      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+      
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        
+        // Si el saldo ya llegó a cero por abonos extra previos, anulamos la cuota
+        if (currentBalance <= 0.5) { 
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
+          continue;
+        }
+
+        // Interés = Saldo Vivo del momento * tasa
+        const interest = currentBalance * rate;
+        
+        // Capital = Cuota Fija (888.488) - Interés
+        let principal = fixedQuota - interest;
+        
+        // REGLA DE ORO DEL ÚLTIMO MES: Si el saldo es menor que el capital que queremos cobrar, la cuota baja para no cobrar de más.
+        if (currentBalance < principal) {
+          principal = currentBalance;
+        }
+
+        updates.push({
+          id: inst.id,
+          expected_amount: Math.round(principal + interest), // La cuota total se ajustará sola en el último mes
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest),
+          status: 'PENDING'
+        });
+        
+        // Reducimos el saldo para la siguiente iteración
+        currentBalance -= principal;
+      }
+    }
+
+    for (const update of updates) {
+      await supabase.from('loan_installments').update({
+        expected_amount: update.expected_amount,
+        principal_portion: update.principal_portion,
+        interest_portion: update.interest_portion,
+        status: update.status
+      }).eq('id', update.id);
+    }
+  };
+
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
     try {
-      const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const pagoRealIngresado = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const cuotaBaseEsperada = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       
-      // Llamamos a la función "process_loan_payment" que acabas de crear en Supabase
-      const { error } = await supabase.rpc('process_loan_payment', {
-        p_installment_id: selectedInstallment.id,
-        p_actual_amount_paid: pagoReal,
-        p_late_fee_charged: moraCobrada,
-        p_actual_payment_date: paymentData.actualDate,
-        p_strategy: paymentData.extraPaymentType
-      });
+      const isLate = paymentData.daysLate > 0;
+      const status = isLate ? 'LATE' : 'PAID';
+      
+      // Cobro Obligatorio es la cuota esperada + la mora que decidiste cobrarle
+      const cobroObligatorio = cuotaBaseEsperada + moraCobrada;
+      const abonoCapitalExtra = pagoRealIngresado - cobroObligatorio;
 
-      if (error) {
-        console.error("Detalle del error de Supabase RPC:", error);
-        throw new Error("Supabase RPC Error: " + error.message);
+      // El Capital real que pagó en esta cuota (Capital esperado + Abono Extra)
+      const capitalBaseOriginalDeEstaCuota = Number(selectedInstallment.principal_portion);
+      const nuevoCapitalPagadoHoy = capitalBaseOriginalDeEstaCuota + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
+
+      // 1. Guardar la cuota pagada
+      const { error } = await supabase.from('loan_installments').update({
+        status: status,
+        actual_payment_date: paymentData.actualDate,
+        actual_amount_paid: pagoRealIngresado,
+        late_fee_charged: moraCobrada,
+        principal_portion: nuevoCapitalPagadoHoy
+      }).eq('id', selectedInstallment.id);
+
+      if (error) throw error;
+
+      // Actualizar estado local
+      const instIndex = loanInstallments.findIndex(i => i.id === selectedInstallment.id);
+      if (instIndex > -1) {
+        loanInstallments[instIndex].status = status;
+        loanInstallments[instIndex].principal_portion = nuevoCapitalPagadoHoy;
       }
 
-      alert('¡Pago registrado con éxito! Supabase procesó la matemática.');
+      // 2. CALCULAR SALDO VIVO ACTUALIZADO PARA MANDARLO AL RECÁLCULO
+      const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+      const capitalPagadoHistorico = loanInstallments
+        .filter(i => i.status === 'PAID' || i.status === 'LATE')
+        .reduce((sum, i) => sum + Number(i.principal_portion), 0);
       
+      const saldoVivoRestante = capitalOriginal - capitalPagadoHistorico;
+
+      // 3. Ejecutar recálculo si el cliente pagó de más
+      if (abonoCapitalExtra > 10) {
+        await recalculateFutureInstallments(saldoVivoRestante, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
+        alert(`¡Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado! Cuotas futuras recalculadas.`);
+      } else {
+        alert('¡Pago registrado con éxito!');
+      }
+
       setShowPaymentModal(false);
-      
-      // FORZAR ACTUALIZACIÓN VISUAL
-      setLoanInstallments([]);
+      setLoanInstallments([]); 
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
-      alert('Error crítico de base de datos al registrar pago: ' + err.message);
+      alert('Error al registrar pago: ' + err.message);
     }
   };
 
-  // --- CÁLCULO VISUAL DEL SALDO VIVO BLINDADO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    
-    const capitalYaPagado = loanInstallments
-      .filter(i => i.status === 'PAID' || i.status === 'LATE')
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-      
+    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
     const saldo = capitalOriginal - capitalYaPagado;
     return saldo > 0 ? saldo : 0;
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,Cuota,Fecha Pago,Saldo Inicio,Costos asociados,Capital,Interes,Mora,Vr. Cuota,Saldo Final\n";
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
     
     let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     
@@ -223,15 +334,21 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
         const rowData = [
           row.installment_number, 
-          row.actual_payment_date || row.expected_payment_date, 
-          saldoInicio, costosAsociados, row.principal_portion, row.interest_portion, 
-          row.late_fee_charged > 0 ? row.late_fee_charged : 0,
-          valorCuotaTotal, saldoFinal
+          row.expected_payment_date, 
+          saldoInicio,
+          costosAsociados,
+          row.principal_portion,
+          row.interest_portion, 
+          row.late_fee_charged,
+          valorCuotaTotal,
+          saldoFinal,
+          row.status, 
+          row.actual_payment_date || 'N/A', 
+          row.actual_amount_paid
         ];
         csvContent += rowData.join(",") + "\n";
       }
     });
-    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -300,6 +417,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
