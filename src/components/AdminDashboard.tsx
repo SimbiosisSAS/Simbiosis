@@ -87,9 +87,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial.`)) {
+    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`);
+    
+    if (confirmDelete) {
       try {
-        await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+        const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
+        if (error) throw error;
         alert('Crédito eliminado exitosamente');
         setSelectedLoan(null);
         fetchActiveLoans();
@@ -151,28 +154,129 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- 1. LÓGICA FINANCIERA DELEGADA A SUPABASE (RPC) ---
+  // --- MATEMÁTICA BANCARIA EXACTA ---
+  const recalculateFutureInstallments = async (strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
+    if (!selectedLoan || !selectedInstallment) return;
+    
+    const futureInstallments = loanInstallments
+      .filter(i => i.installment_number > selectedInstallment.installment_number)
+      .sort((a, b) => a.installment_number - b.installment_number);
+      
+    if (futureInstallments.length === 0) return;
+
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const capitalYaPagado = loanInstallments
+      .filter(i => i.status === 'PAID' || i.status === 'LATE' || i.id === selectedInstallment.id)
+      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
+
+    let currentBalance = capitalOriginal - capitalYaPagado;
+    if (currentBalance <= 0) currentBalance = 0;
+
+    const rate = Number(selectedLoan.nominal_rate_mv) / 100;
+    const updates = [];
+
+    if (strategy === 'REDUCE_QUOTA') {
+      const remainingMonths = futureInstallments.length;
+      const newFixedQuota = currentBalance <= 0 ? 0 : currentBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        if (currentBalance <= 0.5) {
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
+          continue;
+        }
+
+        const interest = currentBalance * rate;
+        let principal = newFixedQuota - interest;
+
+        if (i === futureInstallments.length - 1 || currentBalance < principal) principal = currentBalance;
+        
+        updates.push({
+          id: inst.id,
+          expected_amount: Math.round(principal + interest),
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest),
+          status: 'PENDING'
+        });
+        currentBalance -= principal;
+      }
+    } else { // REDUCE_TIME
+      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+      
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        if (currentBalance <= 0.5) { 
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
+          continue;
+        }
+
+        const interest = currentBalance * rate;
+        let principal = fixedQuota - interest;
+        
+        if (currentBalance < principal) principal = currentBalance;
+
+        updates.push({
+          id: inst.id,
+          expected_amount: Math.round(principal + interest),
+          principal_portion: Math.round(principal),
+          interest_portion: Math.round(interest),
+          status: 'PENDING'
+        });
+        currentBalance -= principal;
+      }
+    }
+
+    for (const update of updates) {
+      await supabase.from('loan_installments').update({
+        expected_amount: update.expected_amount,
+        principal_portion: update.principal_portion,
+        interest_portion: update.interest_portion,
+        status: update.status
+      }).eq('id', update.id);
+    }
+  };
+
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
-    
     try {
       const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       
-      const { error } = await supabase.rpc('process_loan_payment', {
-        p_installment_id: selectedInstallment.id,
-        p_actual_amount_paid: pagoReal,
-        p_late_fee_charged: moraCobrada,
-        p_actual_payment_date: paymentData.actualDate,
-        p_strategy: paymentData.extraPaymentType
-      });
+      const isLate = paymentData.daysLate > 0;
+      const status = isLate ? 'LATE' : 'PAID';
+      
+      const cobroObligatorio = cuotaBase + moraCobrada;
+      const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
-      if (error) throw new Error("Error en base de datos: " + error.message);
-      
-      alert('¡Pago registrado! Si hubo abonos extra, Supabase recalculó las cuotas matemáticamente.');
-      
+      const capitalOriginalEstaCuota = Number(selectedInstallment.principal_portion);
+      const nuevoCapitalPagadoHoy = capitalOriginalEstaCuota + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
+
+      const { error } = await supabase.from('loan_installments').update({
+        status: status,
+        actual_payment_date: paymentData.actualDate,
+        actual_amount_paid: pagoReal,
+        late_fee_charged: moraCobrada,
+        principal_portion: nuevoCapitalPagadoHoy
+      }).eq('id', selectedInstallment.id);
+
+      if (error) throw error;
+
+      const instIndex = loanInstallments.findIndex(i => i.id === selectedInstallment.id);
+      if (instIndex > -1) {
+        loanInstallments[instIndex].status = status;
+        loanInstallments[instIndex].principal_portion = nuevoCapitalPagadoHoy;
+      }
+
+      if (abonoCapitalExtra > 10) {
+        await recalculateFutureInstallments(paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
+        alert(`¡Abono a capital aplicado! Cuotas futuras recalculadas.`);
+      } else {
+        alert('¡Pago registrado con éxito!');
+      }
+
       setShowPaymentModal(false);
-      setLoanInstallments([]);
+      setLoanInstallments([]); 
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
@@ -180,54 +284,39 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
-  // --- 2. CÁLCULO VISUAL DEL SALDO VIVO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    const capitalYaPagado = loanInstallments
-      .filter(i => i.status === 'PAID' || i.status === 'LATE')
-      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-      
+    const capitalYaPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((sum, i) => sum + Number(i.principal_portion), 0);
     const saldo = capitalOriginal - capitalYaPagado;
     return saldo > 0 ? saldo : 0;
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
+    let csvContent = "data:text/csv;charset=utf-8,Cuota,Fecha Pago,Saldo Inicio,Costos asociados,Capital,Interes,Mora,Vr. Cuota,Saldo Final\n";
     
     let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     
-    loanInstallments.forEach((row, index) => {
-      if (row.status !== 'PAID_EARLY') {
-        const saldoInicio = tempBalanceForExcel;
-        const capitalRestar = Number(row.principal_portion);
-        let saldoFinal = saldoInicio - capitalRestar;
-        if (saldoFinal < 0) saldoFinal = 0;
-        
-        tempBalanceForExcel = saldoFinal;
+    loanInstallments.filter(inst => inst.status !== 'PAID_EARLY').forEach((row, index) => {
+      const saldoInicio = tempBalanceForExcel;
+      const capitalRestar = Number(row.principal_portion);
+      let saldoFinal = saldoInicio - capitalRestar;
+      if (saldoFinal < 0) saldoFinal = 0;
+      tempBalanceForExcel = saldoFinal;
 
-        const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
+      const costosAsoc = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+      const vrCuota = Number(row.expected_amount) + costosAsoc;
+      const mora = row.late_fee_charged > 0 ? row.late_fee_charged : 0;
 
-        const rowData = [
-          row.installment_number, 
-          row.expected_payment_date, 
-          saldoInicio,
-          costosAsociados,
-          row.principal_portion,
-          row.interest_portion, 
-          row.late_fee_charged,
-          valorCuotaTotal,
-          saldoFinal,
-          row.status, 
-          row.actual_payment_date || 'N/A', 
-          row.actual_amount_paid
-        ];
-        csvContent += rowData.join(",") + "\n";
-      }
+      const rowData = [
+        row.installment_number, 
+        row.actual_payment_date || row.expected_payment_date, 
+        saldoInicio, costosAsoc, row.principal_portion, row.interest_portion, mora, vrCuota, saldoFinal
+      ];
+      csvContent += rowData.join(",") + "\n";
     });
+    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -296,6 +385,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
@@ -437,7 +528,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   </button>
                 </div>
                 
-                {/* --- 4. LA TABLA VISUAL DE 9 COLUMNAS (IDÉNTICA A EXCEL) --- */}
                 {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
                   <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                     <table className="w-full text-left text-sm whitespace-nowrap">
