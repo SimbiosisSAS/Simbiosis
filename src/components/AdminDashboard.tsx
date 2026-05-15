@@ -394,6 +394,177 @@ const calculatePazYSalvo = () => {
   setShowPazYSalvoModal(true);
 };
 };
+const generarEstadoCuenta = () => {
+  if (!selectedLoan || loanInstallments.length === 0) return;
+
+  const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+  let saldoTemp = capitalOriginal + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
+
+  const filas = loanInstallments
+    .filter(i => i.status !== 'PAID_EARLY')
+    .map((inst, index) => {
+      const saldoInicio = saldoTemp;
+      const capital = Number(inst.principal_portion);
+      let saldoFinal = Math.max(saldoInicio - capital, 0);
+      saldoTemp = saldoFinal;
+      const costos = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+
+      const estadoLabel: any = {
+        PAID: 'Al día', LATE: 'Mora', PENDING: 'Pendiente', PAID_EARLY: 'Anulada'
+      };
+
+      return `
+        <tr style="border-bottom: 1px solid #e5e7eb;">
+          <td style="padding: 8px; text-align:center;">${inst.installment_number}</td>
+          <td style="padding: 8px;">${inst.actual_payment_date || inst.expected_payment_date}</td>
+          <td style="padding: 8px; text-align:right;">$ ${Math.round(saldoInicio).toLocaleString('es-CO')}</td>
+          <td style="padding: 8px; text-align:right;">${costos > 0 ? '$ ' + costos.toLocaleString('es-CO') : '--'}</td>
+          <td style="padding: 8px; text-align:right;">$ ${Math.round(capital).toLocaleString('es-CO')}</td>
+          <td style="padding: 8px; text-align:right;">$ ${Math.round(Number(inst.interest_portion)).toLocaleString('es-CO')}</td>
+          <td style="padding: 8px; text-align:right; color: ${Number(inst.late_fee_charged) > 0 ? '#dc2626' : '#6b7280'};">
+            ${Number(inst.late_fee_charged) > 0 ? '$ ' + Math.round(Number(inst.late_fee_charged)).toLocaleString('es-CO') : '--'}
+          </td>
+          <td style="padding: 8px; text-align:right; font-weight:bold;">$ ${Math.round(Number(inst.expected_amount)).toLocaleString('es-CO')}</td>
+          <td style="padding: 8px; text-align:right;">$ ${Math.round(saldoFinal).toLocaleString('es-CO')}</td>
+          <td style="padding: 8px; text-align:center;">
+            <span style="padding: 2px 8px; border-radius: 9999px; font-size:11px; background: ${inst.status === 'PAID' ? '#d1fae5' : inst.status === 'LATE' ? '#fee2e2' : '#fef9c3'}; color: ${inst.status === 'PAID' ? '#065f46' : inst.status === 'LATE' ? '#991b1b' : '#854d0e'};">
+              ${estadoLabel[inst.status] || inst.status}
+            </span>
+          </td>
+          <td style="padding: 8px; text-align:right; color: #059669; font-weight:bold;">
+            ${inst.actual_amount_paid > 0 ? '$ ' + Math.round(Number(inst.actual_amount_paid)).toLocaleString('es-CO') : '--'}
+          </td>
+        </tr>`;
+    }).join('');
+
+  const totalIntereses = loanInstallments.reduce((s, i) => s + Number(i.interest_portion), 0);
+  const totalMoras = loanInstallments.reduce((s, i) => s + Number(i.late_fee_charged || 0), 0);
+  const totalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
+  const saldoVivo = calculateCurrentBalance();
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8"/>
+      <title>Estado de Cuenta - ${selectedLoan.client_name}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; font-size: 13px; color: #111827; padding: 32px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; border-bottom: 2px solid #059669; padding-bottom: 16px; }
+        .logo { font-size: 22px; font-weight: bold; color: #059669; }
+        .subtitle { font-size: 11px; color: #6b7280; margin-top: 2px; }
+        h2 { font-size: 16px; margin-bottom: 4px; }
+        .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+        .info-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+        .info-label { font-size: 10px; text-transform: uppercase; color: #6b7280; margin-bottom: 4px; }
+        .info-value { font-size: 15px; font-weight: bold; color: #111827; }
+        .info-value.green { color: #059669; }
+        .info-value.red { color: #dc2626; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        thead { background: #059669; color: white; }
+        th { padding: 8px; text-align: right; white-space: nowrap; }
+        th:first-child, th:nth-child(2) { text-align: left; }
+        tbody tr:nth-child(even) { background: #f9fafb; }
+        .summary { margin-top: 24px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .summary-card { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px; }
+        .footer { margin-top: 32px; border-top: 1px solid #e5e7eb; padding-top: 12px; font-size: 11px; color: #9ca3af; text-align: center; }
+        @media print { body { padding: 16px; } button { display: none; } }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="logo">Simbiosis</div>
+          <div class="subtitle">Loan Management System</div>
+        </div>
+        <div style="text-align:right;">
+          <h2>Estado de Cuenta</h2>
+          <p style="color:#6b7280; font-size:12px;">Fecha de corte: ${new Date().toLocaleDateString('es-CO')}</p>
+          <button onclick="window.print()" style="margin-top:8px; padding:6px 16px; background:#059669; color:white; border:none; border-radius:6px; cursor:pointer; font-size:12px;">
+            Imprimir / Guardar PDF
+          </button>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-card">
+          <div class="info-label">Cliente</div>
+          <div class="info-value">${selectedLoan.client_name}</div>
+          <div style="font-size:11px; color:#6b7280;">ID: ${selectedLoan.client_id_number || selectedLoan.client_id}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Capital Original</div>
+          <div class="info-value">$ ${capitalOriginal.toLocaleString('es-CO')}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Saldo Vivo Actual</div>
+          <div class="info-value ${saldoVivo > 0 ? 'red' : 'green'}">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Fecha Desembolso</div>
+          <div class="info-value">${new Date(selectedLoan.disbursement_date).toLocaleDateString('es-CO')}</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Tasa Nominal MV</div>
+          <div class="info-value">${selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? '--'}%</div>
+        </div>
+        <div class="info-card">
+          <div class="info-label">Cuotas Pagadas</div>
+          <div class="info-value green">${loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').length} de ${loanInstallments.filter(i => i.status !== 'PAID_EARLY').length}</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:center;">No.</th>
+            <th style="text-align:left;">Fecha</th>
+            <th>Saldo Inicio</th>
+            <th>Costos</th>
+            <th>Capital</th>
+            <th>Interés</th>
+            <th>Mora</th>
+            <th>Vr. Cuota</th>
+            <th>Saldo Final</th>
+            <th>Estado</th>
+            <th>Pagado</th>
+          </tr>
+        </thead>
+        <tbody>${filas}</tbody>
+      </table>
+
+      <div class="summary">
+        <div class="summary-card">
+          <div class="info-label">Total Intereses</div>
+          <div class="info-value">$ ${Math.round(totalIntereses).toLocaleString('es-CO')}</div>
+        </div>
+        <div class="summary-card">
+          <div class="info-label">Total Moras</div>
+          <div class="info-value red">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</div>
+        </div>
+        <div class="summary-card">
+          <div class="info-label">Total Pagado</div>
+          <div class="info-value green">$ ${Math.round(totalPagado).toLocaleString('es-CO')}</div>
+        </div>
+        <div class="summary-card" style="background:#fff7ed; border-color:#fed7aa;">
+          <div class="info-label">Saldo Pendiente</div>
+          <div class="info-value" style="color:#c2410c;">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        Documento generado el ${new Date().toLocaleDateString('es-CO')} a las ${new Date().toLocaleTimeString('es-CO')} — Simbiosis Loan Management System
+      </div>
+    </body>
+    </html>`;
+
+  const ventana = window.open('', '_blank', 'width=1100,height=800');
+  if (ventana) {
+    ventana.document.write(html);
+    ventana.document.close();
+  }
+};
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
@@ -713,15 +884,26 @@ const handleDeleteApplication = async (appId: string) => {
                     <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
                     <p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number || selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
-                      <Trash2 size={14} /> Eliminar
-                    </button>
-                    <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">
-                      Cerrar
-                    </button>
-                  </div>
-                </div>
+                  <div className="flex gap-2 flex-wrap">
+  <button
+    onClick={calculatePazYSalvo}
+    className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"
+  >
+    <DollarSign size={14} /> Paz y Salvo
+  </button>
+  <button
+    onClick={generarEstadoCuenta}
+    className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"
+  >
+    <FileText size={14} /> Estado de Cuenta
+  </button>
+  <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1">
+    <Trash2 size={14} /> Eliminar
+  </button>
+  <button onClick={() => setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">
+    Cerrar
+  </button>
+</div>
 
                 <div className="grid grid-cols-3 gap-4 mb-6">
                   <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30">
@@ -913,7 +1095,72 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
           </>
         )}
       </div>
+{showPazYSalvoModal && pazYSalvoData && selectedLoan && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+        <DollarSign className="text-emerald-500" /> Liquidación Anticipada
+      </h2>
+      <p className="text-slate-400 text-sm mb-6">
+        Paz y Salvo para <span className="text-white font-semibold">{selectedLoan.client_name}</span>
+      </p>
 
+      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3 mb-6">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Saldo Capital:</span>
+          <span className="text-slate-200 font-mono">{formatCurrency(pazYSalvoData.saldoActual)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Último pago:</span>
+          <span className="text-slate-300">{pazYSalvoData.ultimaFecha}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Días transcurridos:</span>
+          <span className="text-amber-400 font-bold">{pazYSalvoData.diasTranscurridos} días</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Interés corrido:</span>
+          <span className="text-amber-400 font-mono">+ {formatCurrency(pazYSalvoData.interesCorrido)}</span>
+        </div>
+        {pazYSalvoData.morasPendientes > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-400">Moras pendientes:</span>
+            <span className="text-red-400 font-mono">+ {formatCurrency(pazYSalvoData.morasPendientes)}</span>
+          </div>
+        )}
+        <div className="border-t border-slate-700 pt-3 mt-2 flex justify-between">
+          <span className="text-white font-bold text-base">Total a Pagar Hoy:</span>
+          <span className="text-emerald-400 font-mono font-bold text-lg">{formatCurrency(pazYSalvoData.totalAPagar)}</span>
+        </div>
+        <p className="text-xs text-slate-500 text-right">Calculado al {pazYSalvoData.fechaCalculo}</p>
+      </div>
+
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6">
+        <p className="text-xs text-amber-400">
+          Este valor es válido únicamente para el día de hoy. Si el pago se realiza en una fecha diferente, debe recalcularse.
+        </p>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => setShowPazYSalvoModal(false)}
+          className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium"
+        >
+          Cerrar
+        </button>
+        <button
+          onClick={() => {
+            generarEstadoCuenta();
+            setShowPazYSalvoModal(false);
+          }}
+          className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors font-bold"
+        >
+          Ver Estado de Cuenta
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* MODAL DE PAGO */}
       {showPaymentModal && selectedInstallment && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
