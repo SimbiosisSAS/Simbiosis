@@ -415,7 +415,20 @@ const generarEstadoCuenta = () => {
       saldoTemp = saldoFinal;
       const costos = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
 const costos = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-
+let moraFila = Number(inst.late_fee_charged || 0);
+if (inst.status === 'PENDING') {
+  const fechaEsp = new Date(inst.expected_payment_date);
+  fechaEsp.setHours(0, 0, 0, 0);
+  const hoyDoc = new Date(); hoyDoc.setHours(0, 0, 0, 0);
+  if (fechaEsp < hoyDoc) {
+    const moraCalc = calculateLateFee(
+      inst.expected_payment_date,
+      new Date().toISOString().split('T')[0],
+      Number(inst.expected_amount)
+    );
+    moraFila = moraCalc.penalty;
+  }
+}
 // Mora en tiempo real para cuotas vencidas pendientes
 let moraFila = Number(inst.late_fee_charged || 0);
 if (inst.status === 'PENDING') {
