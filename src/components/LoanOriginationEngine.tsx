@@ -1,4 +1,17 @@
 import { useState, useMemo, useEffect } from 'react';
+
+ // --- ESCUCHAR DATOS DEL ADMIN DASHBOARD ---
+  useEffect(() => {
+    if (prefillData && prefillData.id_number) {
+      setParams(p => ({
+        ...p,
+        clientName: `${prefillData.first_name} ${prefillData.last_name}`,
+        clientId: prefillData.id_number,
+        principalAmount: Number(prefillData.credit_amount) || 0
+      }));
+    }
+  }, [prefillData]);
+
 import { supabase } from '../lib/supabase';
 import { Calculator, FileDown, Rocket, TrendingUp, DollarSign, Percent, Calendar, User, Hash, ChevronDown, ChevronUp, FileDigit } from 'lucide-react';
 
@@ -138,7 +151,8 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   };
 }
 
-export default function LoanOriginationEngine() {
+export default function LoanOriginationEngine({ prefillData }: { prefillData?: any }) {
+
   const [params, setParams] = useState<LoanParams>({
     loanNumber: '',
     clientName: '',
