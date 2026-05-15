@@ -387,6 +387,7 @@ const calculatePazYSalvo = () => {
     interesCorrido,
     morasPendientes,
     totalAPagar,
+    tienePagos: pagadas.length > 0,
     fechaCalculo: hoy.toLocaleDateString('es-CO'),
     ultimaFecha: ultimaFecha.toLocaleDateString('es-CO'),
   });
