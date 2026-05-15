@@ -31,7 +31,9 @@ const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
     extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
   
-const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos'); // ← NUEVA LÍNEA
+const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos');
+const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
+const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
 
  useEffect(() => {
   fetchUsuryRates(); // ← cargar tasas siempre, en cualquier pestaña
@@ -329,7 +331,9 @@ const repairFullSchedule = async () => {
   alert('¡Plan recalculado correctamente!');
   await fetchInstallments(selectedLoan.id);
 };
-
+const calculatePazYSalvo = () => {
+  // ... toda la función ...
+};
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
