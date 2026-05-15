@@ -12,17 +12,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [activeLoans, setActiveLoans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Tasa de mora (Base de datos)
   const [usuryRates, setUsuryRates] = useState<any[]>([]);
   const [newRate, setNewRate] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), rate: '' });
 
-  // Estados de detalle
   const [selectedApp, setSelectedApp] = useState<CreditApplication | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // Estados del Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
@@ -30,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
+    extraPaymentType: 'REDUCE_TIME' 
   });
 
   useEffect(() => {
@@ -90,12 +87,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
-    const confirmDelete = window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`);
-    
-    if (confirmDelete) {
+    if (window.confirm(`¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial.`)) {
       try {
-        const { error } = await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
-        if (error) throw error;
+        await supabase.from('active_loans').delete().eq('id', selectedLoan.id);
         alert('Crédito eliminado exitosamente');
         setSelectedLoan(null);
         fetchActiveLoans();
@@ -157,153 +151,79 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- LÓGICA FINANCIERA PERFECCIONADA: RECALCULAR AMORTIZACIÓN ---
-  // AHORA LA LÓGICA DE REDUCIR TIEMPO SE COMPORTA COMO UN EXCEL BANCARIO
-  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
-    if (!selectedLoan || !selectedInstallment) return;
-    
-    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
-    if (futureInstallments.length === 0) return;
-
-    // Calcular Saldo Vivo Exacto sumando el capital de las cuotas que aún dicen PENDING
-    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let newBalance = previousPendingPrincipal - excedenteCapital;
-    
-    if (newBalance <= 0) newBalance = 0;
-
-    const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    const remainingMonths = futureInstallments.length;
-    let currentBalance = newBalance;
-
-    const updates = [];
-
-    if (strategy === 'REDUCE_QUOTA') {
-      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        if (currentBalance <= 0.5) {
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        const interest = currentBalance * rate;
-        let principal = newFixedQuota - interest;
-
-        if (i === futureInstallments.length - 1) principal = currentBalance;
-        
-        updates.push({
-          id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    } else {
-      // ESTRATEGIA: REDUCIR TIEMPO
-      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        // Si el saldo vivo es 0, anulamos las cuotas restantes
-        if (currentBalance <= 0.5) { 
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        // El interés siempre es el Saldo Inicial * Tasa (Nunca 0 a menos que el saldo sea 0)
-        const interest = currentBalance * rate;
-        let principal = fixedQuota - interest;
-        
-        // Si el saldo vivo es MENOR que el capital de la cuota fija, ajustamos a la baja la última cuota real
-        if (currentBalance < principal) {
-          principal = currentBalance;
-        }
-
-        updates.push({
-          id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    }
-
-    for (const update of updates) {
-      await supabase.from('loan_installments').update({
-        expected_amount: update.expected_amount,
-        principal_portion: update.principal_portion,
-        interest_portion: update.interest_portion,
-        status: update.status
-      }).eq('id', update.id);
-    }
-  };
-
+  // --- 1. LÓGICA FINANCIERA DELEGADA A SUPABASE (RPC) ---
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
     try {
       const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
-      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       
-      const isLate = paymentData.daysLate > 0;
-      const status = isLate ? 'LATE' : 'PAID';
+      const { error } = await supabase.rpc('process_loan_payment', {
+        p_installment_id: selectedInstallment.id,
+        p_actual_amount_paid: pagoReal,
+        p_late_fee_charged: moraCobrada,
+        p_actual_payment_date: paymentData.actualDate,
+        p_strategy: paymentData.extraPaymentType
+      });
+
+      if (error) throw new Error("Error en base de datos: " + error.message);
       
-      const cobroObligatorio = cuotaBase + moraCobrada;
-      const abonoCapitalExtra = pagoReal - cobroObligatorio;
-
-      const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
-
-      const { error } = await supabase.from('loan_installments').update({
-        status: status,
-        actual_payment_date: paymentData.actualDate,
-        actual_amount_paid: pagoReal,
-        late_fee_charged: moraCobrada,
-        principal_portion: nuevoPrincipalPagadoEstaCuota
-      }).eq('id', selectedInstallment.id);
-
-      if (error) throw error;
-
-      if (abonoCapitalExtra > 10) {
-        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
-      } else {
-        alert('¡Pago registrado con éxito!');
-      }
-
+      alert('¡Pago registrado! Si hubo abonos extra, Supabase recalculó las cuotas matemáticamente.');
+      
       setShowPaymentModal(false);
       setLoanInstallments([]);
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
-      console.error("Error en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
 
+  // --- 2. CÁLCULO VISUAL DEL SALDO VIVO ---
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const saldoPendiente = loanInstallments
-      .filter(i => i.status === 'PENDING')
+    
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const capitalYaPagado = loanInstallments
+      .filter(i => i.status === 'PAID' || i.status === 'LATE')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    return saldoPendiente > 0 ? saldoPendiente : 0;
+      
+    const saldo = capitalOriginal - capitalYaPagado;
+    return saldo > 0 ? saldo : 0;
   };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Cuota Esperada,Capital,Interes,Estado,Fecha Real Pago,Monto Pagado,Mora Cobrada\n";
-    loanInstallments.forEach(row => {
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
+    
+    let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    
+    loanInstallments.forEach((row, index) => {
       if (row.status !== 'PAID_EARLY') {
+        const saldoInicio = tempBalanceForExcel;
+        const capitalRestar = Number(row.principal_portion);
+        let saldoFinal = saldoInicio - capitalRestar;
+        if (saldoFinal < 0) saldoFinal = 0;
+        
+        tempBalanceForExcel = saldoFinal;
+
+        const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
+
         const rowData = [
-          row.installment_number, row.expected_payment_date, row.expected_amount, row.principal_portion,
-          row.interest_portion, row.status, row.actual_payment_date || 'N/A', row.actual_amount_paid, row.late_fee_charged
+          row.installment_number, 
+          row.expected_payment_date, 
+          saldoInicio,
+          costosAsociados,
+          row.principal_portion,
+          row.interest_portion, 
+          row.late_fee_charged,
+          valorCuotaTotal,
+          saldoFinal,
+          row.status, 
+          row.actual_payment_date || 'N/A', 
+          row.actual_amount_paid
         ];
         csvContent += rowData.join(",") + "\n";
       }
@@ -376,8 +296,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
-              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
-              
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
@@ -519,37 +437,78 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   </button>
                 </div>
                 
+                {/* --- 4. LA TABLA VISUAL DE 9 COLUMNAS (IDÉNTICA A EXCEL) --- */}
                 {loading ? <p className="text-slate-400 text-center py-8">Cargando cuotas...</p> : (
                   <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                     <table className="w-full text-left text-sm whitespace-nowrap">
                       <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
                         <tr>
-                          <th className="p-3">Nº</th>
-                          <th className="p-3">Fecha Vence</th>
-                          <th className="p-3 text-right">Monto Base</th>
+                          <th className="p-3">Cuota</th>
+                          <th className="p-3">Fecha Pago</th>
+                          <th className="p-3 text-right">Saldo Inicio</th>
+                          <th className="p-3 text-right">Costos Asoc.</th>
+                          <th className="p-3 text-right">Capital</th>
+                          <th className="p-3 text-right">Interés</th>
+                          <th className="p-3 text-right">Mora</th>
+                          <th className="p-3 text-right">Vr. Cuota</th>
+                          <th className="p-3 text-right">Saldo Final</th>
                           <th className="p-3 text-center">Estado</th>
                           <th className="p-3 text-center">Acción</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-700/50">
-                        {loanInstallments.map(inst => (
-                          <tr key={inst.id} className={`transition-colors ${inst.status === 'PAID_EARLY' ? 'hidden' : 'hover:bg-slate-800/50'}`}>
-                            <td className="p-3 text-slate-300 font-mono">{inst.installment_number}</td>
-                            <td className="p-3 text-slate-400">{inst.expected_payment_date}</td>
-                            <td className="p-3 font-medium text-slate-200 text-right tabular-nums">{formatCurrency(inst.expected_amount)}</td>
-                            <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
-                            <td className="p-3 text-center">
-                              {inst.status === 'PENDING' ? (
-                                <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
-                              ) : inst.status !== 'PAID_EARLY' ? (
-                                <div className="text-xs text-slate-400 flex flex-col items-center">
-                                  <span>Pagado: {inst.actual_payment_date}</span>
-                                  <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
-                                </div>
-                              ) : null}
-                            </td>
-                          </tr>
-                        ))}
+                        {(() => {
+                          let tempBalanceForTable = selectedLoan ? Number(selectedLoan.principal_amount || selectedLoan.loan_amount) : 0;
+                          
+                          return loanInstallments
+                            .filter(inst => inst.status !== 'PAID_EARLY')
+                            .map((inst, index) => {
+                              const saldoInicio = tempBalanceForTable;
+                              const capitalParaRestar = Number(inst.principal_portion);
+                              let saldoFinal = saldoInicio - capitalParaRestar;
+                              if (saldoFinal < 0) saldoFinal = 0;
+                              
+                              tempBalanceForTable = saldoFinal;
+
+                              const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+                              const valorCuotaTotal = Number(inst.expected_amount) + costosAsociados;
+
+                              return (
+                                <tr key={inst.id} className="hover:bg-slate-800/50 transition-colors">
+                                  <td className="p-3 text-slate-300 font-mono text-center">{inst.installment_number}</td>
+                                  <td className="p-3 text-slate-400">{inst.actual_payment_date || inst.expected_payment_date}</td>
+                                  
+                                  <td className="p-3 text-slate-400 text-right tabular-nums">{formatCurrency(saldoInicio)}</td>
+                                  
+                                  <td className="p-3 text-slate-400 text-right tabular-nums">
+                                    {costosAsociados > 0 ? formatCurrency(costosAsociados) : '--'}
+                                  </td>
+                                  
+                                  <td className="p-3 text-slate-200 text-right tabular-nums">{formatCurrency(inst.principal_portion)}</td>
+                                  <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
+                                  
+                                  <td className="p-3 text-red-400/80 text-right tabular-nums">
+                                    {inst.late_fee_charged > 0 ? formatCurrency(inst.late_fee_charged) : '--'}
+                                  </td>
+                                  
+                                  <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(valorCuotaTotal)}</td>
+                                  <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(saldoFinal)}</td>
+                                  
+                                  <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
+                                  <td className="p-3 text-center min-w-[140px]">
+                                    {inst.status === 'PENDING' ? (
+                                      <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+                                    ) : (
+                                      <div className="text-xs text-slate-400 flex flex-col items-center">
+                                        <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
+                                        <span>(Pago)</span>
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>
