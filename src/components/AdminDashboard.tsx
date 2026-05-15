@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME' 
+    extraPaymentType: 'REDUCE_TIME'
   });
 
   useEffect(() => {
@@ -154,8 +154,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- MATEMÁTICA BANCARIA EXACTA ---
-  const recalculateFutureInstallments = async (strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
+  // ============================================================================
+  // EL MOTOR FINANCIERO: EXACTITUD BANCARIA BASADA EN EXCEL
+  // ============================================================================
+  const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
     if (!selectedLoan || !selectedInstallment) return;
     
     const futureInstallments = loanInstallments
@@ -164,68 +166,91 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       
     if (futureInstallments.length === 0) return;
 
+    // Calcular Saldo Vivo Exacto (Capital Original - Todo el capital pagado históricamente incluyendo el abono de hoy)
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     const capitalYaPagado = loanInstallments
       .filter(i => i.status === 'PAID' || i.status === 'LATE' || i.id === selectedInstallment.id)
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
 
-    let currentBalance = capitalOriginal - capitalYaPagado;
-    if (currentBalance <= 0) currentBalance = 0;
+    let saldoInicialIteracion = capitalOriginal - capitalYaPagado;
+    if (saldoInicialIteracion <= 0) saldoInicialIteracion = 0;
 
     const rate = Number(selectedLoan.nominal_rate_mv) / 100;
     const updates = [];
 
     if (strategy === 'REDUCE_QUOTA') {
       const remainingMonths = futureInstallments.length;
-      const newFixedQuota = currentBalance <= 0 ? 0 : currentBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
+      const nuevaCuotaFija = saldoInicialIteracion <= 0 ? 0 : 
+        saldoInicialIteracion * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
       
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
-        if (currentBalance <= 0.5) {
+        
+        if (saldoInicialIteracion <= 0.5) {
           updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
 
-        const interest = currentBalance * rate;
-        let principal = newFixedQuota - interest;
+        // 1. Calcular Interés sobre el Saldo Inicial del mes
+        const interesDelMes = saldoInicialIteracion * rate;
+        
+        // 2. Calcular Capital restando el Interés a la Cuota Fija
+        let capitalDelMes = nuevaCuotaFija - interesDelMes;
 
-        if (i === futureInstallments.length - 1 || currentBalance < principal) principal = currentBalance;
+        // 3. Ajuste de la última cuota para no dejar saldos residuales
+        if (i === futureInstallments.length - 1 || saldoInicialIteracion < capitalDelMes) {
+          capitalDelMes = saldoInicialIteracion;
+        }
         
         updates.push({
           id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
+          expected_amount: Math.round(capitalDelMes + interesDelMes),
+          principal_portion: Math.round(capitalDelMes),
+          interest_portion: Math.round(interesDelMes),
           status: 'PENDING'
         });
-        currentBalance -= principal;
+        
+        // 4. Calcular el Saldo Final para que sea el Saldo Inicial del próximo mes
+        saldoInicialIteracion -= capitalDelMes;
       }
-    } else { // REDUCE_TIME
-      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+    } else { 
+      // ESTRATEGIA: REDUCIR TIEMPO
+      const cuotaFijaOriginal = Number(selectedLoan.fixed_quota_amount);
       
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
-        if (currentBalance <= 0.5) { 
+        
+        if (saldoInicialIteracion <= 0.5) { 
           updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
 
-        const interest = currentBalance * rate;
-        let principal = fixedQuota - interest;
+        // 1. Calcular Interés sobre el Saldo Inicial del mes
+        const interesDelMes = saldoInicialIteracion * rate;
         
-        if (currentBalance < principal) principal = currentBalance;
+        // 2. Calcular Capital restando el Interés a la Cuota Fija Original
+        let capitalDelMes = cuotaFijaOriginal - interesDelMes;
+        
+        // 3. REGLA DE ORO DEL ÚLTIMO MES: 
+        // Si el saldo inicial es menor que el capital que queríamos cobrar, esta es la última cuota y la ajustamos
+        if (saldoInicialIteracion < capitalDelMes) {
+          capitalDelMes = saldoInicialIteracion;
+        }
 
         updates.push({
           id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
+          expected_amount: Math.round(capitalDelMes + interesDelMes),
+          principal_portion: Math.round(capitalDelMes),
+          interest_portion: Math.round(interesDelMes),
           status: 'PENDING'
         });
-        currentBalance -= principal;
+        
+        // 4. Calcular el Saldo Final para que sea el Saldo Inicial del próximo mes
+        saldoInicialIteracion -= capitalDelMes;
       }
     }
 
+    // Guardamos todas las actualizaciones en Supabase de manera asíncrona
     for (const update of updates) {
       await supabase.from('loan_installments').update({
         expected_amount: update.expected_amount,
@@ -238,20 +263,24 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
+    
     try {
       const pagoReal = parseFloat(paymentData.actualAmount.toString().replace(/[^0-9.-]+/g,"")) || 0;
       const moraCobrada = parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g,"")) || 0;
-      const cuotaBase = parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g,"")) || 0;
+      const cuotaBaseEsperada = parseFloat(selectedInstallment.expected_amount.toString()) || 0;
       
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
       
-      const cobroObligatorio = cuotaBase + moraCobrada;
+      // Cobro Obligatorio es la cuota esperada + la mora que decidiste cobrarle
+      const cobroObligatorio = cuotaBaseEsperada + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
 
-      const capitalOriginalEstaCuota = Number(selectedInstallment.principal_portion);
-      const nuevoCapitalPagadoHoy = capitalOriginalEstaCuota + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
+      // El Capital real que pagó en esta cuota (Capital esperado + Abono Extra)
+      const capitalEsperadoDeEstaCuota = Number(selectedInstallment.principal_portion);
+      const nuevoCapitalPagadoHoy = capitalEsperadoDeEstaCuota + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
+      // 1. Guardar la cuota pagada
       const { error } = await supabase.from('loan_installments').update({
         status: status,
         actual_payment_date: paymentData.actualDate,
@@ -262,15 +291,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       if (error) throw error;
 
+      // Actualizar estado local para el recálculo
       const instIndex = loanInstallments.findIndex(i => i.id === selectedInstallment.id);
       if (instIndex > -1) {
         loanInstallments[instIndex].status = status;
         loanInstallments[instIndex].principal_portion = nuevoCapitalPagadoHoy;
       }
 
+      // 2. Si hubo un abono significativo, recalculamos
       if (abonoCapitalExtra > 10) {
-        await recalculateFutureInstallments(paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
-        alert(`¡Abono a capital aplicado! Cuotas futuras recalculadas.`);
+        await recalculateFutureInstallments(abonoCapitalExtra, paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA');
+        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado. Cuotas futuras recalculadas con estrategia: ${paymentData.extraPaymentType === 'REDUCE_QUOTA' ? 'Reducir Cuota' : 'Reducir Plazo'}.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -294,29 +325,39 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,Cuota,Fecha Pago,Saldo Inicio,Costos asociados,Capital,Interes,Mora,Vr. Cuota,Saldo Final\n";
+    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
     
     let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     
-    loanInstallments.filter(inst => inst.status !== 'PAID_EARLY').forEach((row, index) => {
-      const saldoInicio = tempBalanceForExcel;
-      const capitalRestar = Number(row.principal_portion);
-      let saldoFinal = saldoInicio - capitalRestar;
-      if (saldoFinal < 0) saldoFinal = 0;
-      tempBalanceForExcel = saldoFinal;
+    loanInstallments.forEach((row, index) => {
+      if (row.status !== 'PAID_EARLY') {
+        const saldoInicio = tempBalanceForExcel;
+        const capitalRestar = Number(row.principal_portion);
+        let saldoFinal = saldoInicio - capitalRestar;
+        if (saldoFinal < 0) saldoFinal = 0;
+        
+        tempBalanceForExcel = saldoFinal;
 
-      const costosAsoc = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-      const vrCuota = Number(row.expected_amount) + costosAsoc;
-      const mora = row.late_fee_charged > 0 ? row.late_fee_charged : 0;
+        const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
 
-      const rowData = [
-        row.installment_number, 
-        row.actual_payment_date || row.expected_payment_date, 
-        saldoInicio, costosAsoc, row.principal_portion, row.interest_portion, mora, vrCuota, saldoFinal
-      ];
-      csvContent += rowData.join(",") + "\n";
+        const rowData = [
+          row.installment_number, 
+          row.expected_payment_date, 
+          saldoInicio,
+          costosAsociados,
+          row.principal_portion,
+          row.interest_portion, 
+          row.late_fee_charged,
+          valorCuotaTotal,
+          saldoFinal,
+          row.status, 
+          row.actual_payment_date || 'N/A', 
+          row.actual_amount_paid
+        ];
+        csvContent += rowData.join(",") + "\n";
+      }
     });
-    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
