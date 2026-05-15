@@ -350,7 +350,7 @@ if (abonoCapitalExtra > 0) {
 } else {
   // Pago normal o parcial → capital real = lo que pagó menos interés y mora
   const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - moraCobrada;
-  nuevoPrincipalPagadoEstaCuota = Math.max(Math.round(capitalReal), 0);
+  nuevoPrincipalPagadoEstaCuota = Math.round(capitalReal);
 }
 
       const { error } = await supabase.from('loan_installments').update({
