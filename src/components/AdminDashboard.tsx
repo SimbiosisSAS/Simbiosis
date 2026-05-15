@@ -578,6 +578,7 @@ const handleDeleteApplication = async (appId: string) => {
 
         {activeTab === 'cartera' && (
   <div className="space-y-6">
+    <p style={{color: 'red', fontSize: '24px'}}>PRUEBA</p>
 
     {/* SUB-NAVEGACIÓN */}
     <div className="flex gap-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1 w-fit">
