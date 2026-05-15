@@ -19,7 +19,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [loanInstallments, setLoanInstallments] = useState<any[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
-
+const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<any | null>(null);
   const [paymentData, setPaymentData] = useState({
