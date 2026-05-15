@@ -177,7 +177,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     });
   };
 
-  // --- CORRECCIÓN EN NOMBRES DE COLUMNAS PARA SUPABASE ---
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
@@ -185,7 +184,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
       const { data: loanData, error: loanError } = await supabase.from('active_loans').insert({
         loan_number: params.loanNumber || null,
         client_name: params.clientName,
-        client_id: params.clientId,
+        client_id_number: params.clientId, // <-- ESTA ES LA CORRECCIÓN CLAVE
         principal_amount: params.principalAmount,
         origination_costs: params.originationCosts,
         disbursement_date: params.disbursementDate,
@@ -194,8 +193,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         monthly_payment: result.monthlyPayment,
         total_payment: result.totalPayment,
         tir: result.tir,
-        status: 'ACTIVE',
-        amortization_schedule: result.rows
+        status: 'ACTIVE'
       }).select().single();
 
       if (loanError) throw loanError;
