@@ -30,11 +30,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
-  useEffect(() => {
-    if (activeTab === 'solicitudes') fetchApplications();
-    else if (activeTab === 'cartera') { fetchActiveLoans(); setSelectedLoan(null); }
-    else if (activeTab === 'configuracion') fetchUsuryRates();
-  }, [filterStatus, activeTab]);
+ useEffect(() => {
+  fetchUsuryRates(); // ← cargar tasas siempre, en cualquier pestaña
+  if (activeTab === 'solicitudes') fetchApplications();
+  else if (activeTab === 'cartera') { fetchActiveLoans(); setSelectedLoan(null); }
+}, [filterStatus, activeTab]);
 
   const fetchApplications = async () => {
     setLoading(true);
