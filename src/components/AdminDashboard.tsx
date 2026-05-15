@@ -500,7 +500,8 @@ if (abonoCapitalExtra > 0) {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         
-        {activeTab === 'simulador' && <LoanOriginationEngine />}
+        {/* PESTAÑA: SIMULADOR */}
+        {activeTab === 'simulador' && <LoanOriginationEngine prefillData={dataForSimulator} />}
 
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
