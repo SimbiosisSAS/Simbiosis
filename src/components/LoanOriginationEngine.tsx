@@ -70,7 +70,7 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
   const r = nominalRateMV / 100;
   const n = termMonths;
-  const P = principalAmount;
+  const P = principalAmount + originationCosts; // ← costos capitalizados en el préstamo
   const fixedPayment = P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
   const rows: AmortizationRow[] = [];
   let balance = P;
@@ -86,7 +86,7 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
     if (i === n) principalPortion = balance;
 
-    const totalPaymentForPeriod = fixedPayment + costs;
+    const totalPaymentForPeriod = fixedPayment; // ← cuota igual todos los meses
     const closingBalance = i === n ? 0 : Math.max(0, balance - principalPortion);
 
     rows.push({
@@ -125,7 +125,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   const [activating, setActivating] = useState(false);
   const [activateSuccess, setActivateSuccess] = useState(false);
 
-  // --- LÓGICA DE PRE-LLENADO ---
   useEffect(() => {
     if (prefillData && prefillData.id_number) {
       setParams(p => ({
@@ -137,7 +136,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     }
   }, [prefillData]);
 
-  // Autonumeración
   useEffect(() => {
     const fetchNextLoanNumber = async () => {
       try {
@@ -173,11 +171,11 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   const handleReset = () => {
     setIsCalculated(false); setShowFullTable(false); setActivateSuccess(false);
     setParams({
-      loanNumber: params.loanNumber, clientName: '', clientId: '', principalAmount: 0, originationCosts: 0, disbursementDate: '', nominalRateMV: 0, termMonths: 0,
+      loanNumber: params.loanNumber, clientName: '', clientId: '', principalAmount: 0,
+      originationCosts: 0, disbursementDate: '', nominalRateMV: 0, termMonths: 0,
     });
   };
 
-  // --- CONEXIÓN A SUPABASE REPARADA ---
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
@@ -186,11 +184,11 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         loan_number: params.loanNumber || null,
         client_name: params.clientName,
         client_id_number: params.clientId,
-        loan_amount: params.principalAmount, // <-- Supabase V2 espera loan_amount
+        loan_amount: params.principalAmount,
         origination_costs: params.originationCosts,
         disbursement_date: params.disbursementDate,
-        interest_rate_monthly: params.nominalRateMV, // <-- Supabase V2 espera interest_rate_monthly
-        installments: params.termMonths, // <-- Supabase V2 espera installments
+        interest_rate_monthly: params.nominalRateMV,
+        installments: params.termMonths,
         fixed_quota_amount: result.monthlyPayment,
         status: 'ACTIVE'
       }).select().single();
@@ -216,15 +214,15 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
 
       setActivateSuccess(true);
       alert('¡Crédito activado y guardado en la cartera exitosamente!');
-      
+
       const currentNum = parseInt(params.loanNumber.replace(/\D/g, ''), 10);
       if (!isNaN(currentNum)) setParams(p => ({ ...p, loanNumber: (currentNum + 1).toString() }));
-      
-    } catch (err: any) { 
+
+    } catch (err: any) {
       console.error(err);
-      alert('Hubo un error al guardar: ' + err.message); 
-    } finally { 
-      setActivating(false); 
+      alert('Hubo un error al guardar: ' + err.message);
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -238,14 +236,12 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     <div className="space-y-6">
       <div className="grid lg:grid-cols-5 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          
-          {/* BLOQUE DE DATOS Y FOTOS DEL LEAD APROBADO */}
+
           {prefillData && (
             <div className="bg-slate-800/40 border border-emerald-500/30 rounded-2xl p-6 shadow-lg shadow-emerald-500/5">
               <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-2">
                 <User size={16} /> Datos de la Solicitud
               </h3>
-              
               <div className="space-y-3 mb-5">
                 <p className="text-sm flex items-center gap-2 text-slate-300">
                   <Mail size={14} className="text-slate-500" /> {prefillData.email}
@@ -254,7 +250,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
                   <Phone size={14} className="text-slate-500" /> {prefillData.phone}
                 </p>
               </div>
-
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Documentos Adjuntos</p>
                 <div className="grid grid-cols-3 gap-2">
@@ -286,7 +281,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
               <div className="w-9 h-9 bg-emerald-500/15 rounded-lg flex items-center justify-center"><Calculator className="w-5 h-5 text-emerald-400" /></div>
               <div><h3 className="text-sm font-bold text-slate-200">Parámetros del Crédito</h3><p className="text-xs text-slate-500">Configura las variables del préstamo</p></div>
             </div>
-
             <div className="space-y-4">
               <div><label className={labelClass}><FileDigit className="w-3 h-3 inline mr-1" />Número de Crédito</label><input type="text" value={params.loanNumber} onChange={(e) => setParams(p => ({ ...p, loanNumber: e.target.value }))} className={`${inputClass} font-mono text-emerald-400`} placeholder="Ej: 52" /></div>
               <div><label className={labelClass}><User className="w-3 h-3 inline mr-1" />Cliente</label><input type="text" value={params.clientName} onChange={(e) => setParams(p => ({ ...p, clientName: e.target.value }))} className={inputClass} placeholder="Nombre del cliente" /></div>
@@ -296,7 +290,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
               <div><label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha de Desembolso</label><input type="date" value={params.disbursementDate} onChange={(e) => setParams(p => ({ ...p, disbursementDate: e.target.value }))} className={inputClass} /></div>
               <div><label className={labelClass}><Percent className="w-3 h-3 inline mr-1" />Tasa Nominal MV (%)</label><input type="number" value={params.nominalRateMV || ''} onChange={(e) => setParams(p => ({ ...p, nominalRateMV: Number(e.target.value) }))} className={inputClass} placeholder="1.5" min="0" step="0.01" /></div>
               <div><label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Plazo (Meses)</label><input type="number" value={params.termMonths || ''} onChange={(e) => setParams(p => ({ ...p, termMonths: Number(e.target.value) }))} className={inputClass} placeholder="36" min="1" /></div>
-
               <div className="flex gap-3 pt-2">
                 <button onClick={handleCalculate} disabled={!isValid} className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white py-3 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"><Calculator className="w-4 h-4" />Calcular Plan</button>
                 {isCalculated && <button onClick={handleReset} className="px-4 py-3 rounded-xl text-sm font-medium border border-slate-600/50 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-all">Limpiar</button>}
@@ -311,7 +304,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
               <div className="w-9 h-9 bg-emerald-500/15 rounded-lg flex items-center justify-center"><TrendingUp className="w-5 h-5 text-emerald-400" /></div>
               <div><h3 className="text-sm font-bold text-slate-200">Proyección en Vivo</h3><p className="text-xs text-slate-500">Resumen del plan de amortización</p></div>
             </div>
-
             {!result ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="w-16 h-16 bg-slate-700/30 rounded-2xl flex items-center justify-center mb-4"><Calculator className="w-8 h-8 text-slate-600" /></div>
