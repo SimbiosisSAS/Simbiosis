@@ -253,7 +253,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
 
                       <div className="bg-navy-900/60 rounded-xl p-4 border border-navy-700/30">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-400">Solicitudes hoy</span>
+                          <span className="text-xs text-slate-400">Total solicitudes por mes</span>
                           <span className="text-xs text-emerald-400 font-medium">+12%</span>
                         </div>
                         <div className="flex items-end gap-1 mt-3 h-10">
