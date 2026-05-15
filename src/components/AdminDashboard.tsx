@@ -86,10 +86,22 @@ const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
     }
   };
 
-  const handleSelectLoan = (loan: any) => {
-    setSelectedLoan(loan);
-    fetchInstallments(loan.id);
-  };
+  const fetchHistorialCliente = async (clientId: string, currentLoanId: string) => {
+  const { data, error } = await supabase
+    .from('active_loans')
+    .select('*')
+    .eq('client_id_number', clientId)
+    .neq('id', currentLoanId)
+    .order('created_at', { ascending: false });
+  if (!error) setHistorialCliente(data || []);
+};
+
+const handleSelectLoan = (loan: any) => {
+  setSelectedLoan(loan);
+  fetchInstallments(loan.id);
+  fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
+  setHistorialCliente([]);
+};
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan) return;
