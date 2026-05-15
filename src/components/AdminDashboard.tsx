@@ -247,7 +247,32 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // RECALCULATE FUTURE INSTALLMENTS — FUNCIÓN CORREGIDA
+  // HELPER: DETECTAR TASA DEL CRÉDITO
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const getLoanRate = (loan: any, installments: any[]): number => {
+    const rateRaw =
+      loan.interest_rate_monthly ??
+      loan.nominal_rate_mv ??
+      null;
+
+    let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
+
+    // Fallback: derivar la tasa del interés de la primera cuota
+    if (!rate || rate <= 0) {
+      const primerasCuotas = installments.filter((i) => i.installment_number === 1);
+      const principalAmount = Number(loan.principal_amount || loan.loan_amount);
+      if (primerasCuotas.length > 0 && principalAmount > 0) {
+        rate = Number(primerasCuotas[0].interest_portion) / principalAmount;
+        console.warn(`Tasa derivada de cuota 1: ${(rate * 100).toFixed(4)}% MV`);
+      }
+    }
+
+    return rate;
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RECALCULATE FUTURE INSTALLMENTS
   // ─────────────────────────────────────────────────────────────────────────────
 
   const recalculateFutureInstallments = async (
@@ -256,7 +281,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   ) => {
     if (!selectedLoan || !selectedInstallment) return;
 
-    // 1. Obtener cuotas futuras pendientes, ordenadas por número de cuota
     const futureInstallments = loanInstallments
       .filter(
         (i) =>
@@ -267,7 +291,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
     if (futureInstallments.length === 0) return;
 
-    // 2. Calcular el nuevo saldo real después del abono extra
     const saldoPendienteAnterior = futureInstallments.reduce(
       (sum, i) => sum + Number(i.principal_portion),
       0
@@ -276,25 +299,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     let newBalance = saldoPendienteAnterior - excedenteCapital;
     if (newBalance < 0) newBalance = 0;
 
-    // 3. Detectar la tasa mensual — interest_rate_monthly es el campo real en active_loans
-    const rateRaw =
-      selectedLoan.interest_rate_monthly ??
-      selectedLoan.nominal_rate_mv ??
-      null;
-
-    let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
-
-    // Fallback: derivar la tasa del interés de la primera cuota si los campos están vacíos
-    if (!rate || rate <= 0) {
-      const primerasCuotas = loanInstallments.filter((i) => i.installment_number === 1);
-      const principalAmount = Number(
-        selectedLoan.principal_amount || selectedLoan.loan_amount
-      );
-      if (primerasCuotas.length > 0 && principalAmount > 0) {
-        rate = Number(primerasCuotas[0].interest_portion) / principalAmount;
-        console.warn(`Tasa derivada de cuota 1: ${(rate * 100).toFixed(4)}% MV`);
-      }
-    }
+    const rate = getLoanRate(selectedLoan, loanInstallments);
 
     if (!rate || rate <= 0) {
       alert('Error crítico: No se pudo determinar la tasa del crédito. Verifica el campo interest_rate_monthly en Supabase.');
@@ -311,7 +316,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
     let currentBalance = newBalance;
 
-    // ── ESTRATEGIA A: REDUCE_QUOTA ──────────────────────────────────────────
+    // ── REDUCE_QUOTA ────────────────────────────────────────────────────────
     if (strategy === 'REDUCE_QUOTA') {
       const n = futureInstallments.length;
       const newFixedQuota =
@@ -324,13 +329,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         const inst = futureInstallments[i];
 
         if (currentBalance <= 0.5) {
-          updates.push({
-            id: inst.id,
-            expected_amount: 0,
-            principal_portion: 0,
-            interest_portion: 0,
-            status: 'PAID_EARLY',
-          });
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
 
@@ -340,7 +339,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         if (principal >= currentBalance || i === futureInstallments.length - 1) {
           principal = Math.round(currentBalance);
         }
-
         if (principal < 0) principal = 0;
 
         updates.push({
@@ -354,12 +352,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         currentBalance = Math.round(currentBalance - principal);
       }
 
-    // ── ESTRATEGIA B: REDUCE_TIME ───────────────────────────────────────────
+    // ── REDUCE_TIME ─────────────────────────────────────────────────────────
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
 
       if (!fixedQuota || fixedQuota <= 0) {
-        alert('Error: El monto de cuota fija del crédito es inválido. Verifica el campo fixed_quota_amount en Supabase.');
+        alert('Error: El monto de cuota fija del crédito es inválido. Verifica fixed_quota_amount en Supabase.');
         return;
       }
 
@@ -368,22 +366,14 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
 
-        // Si el saldo ya se agotó en una iteración previa → anular cuota
         if (balanceFinished || currentBalance <= 0.5) {
-          updates.push({
-            id: inst.id,
-            expected_amount: 0,
-            principal_portion: 0,
-            interest_portion: 0,
-            status: 'PAID_EARLY',
-          });
+          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
           continue;
         }
 
         const interest = Math.round(currentBalance * rate);
         let principal = fixedQuota - interest;
 
-        // Cuota de cierre: pagar exactamente lo que queda
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
           updates.push({
@@ -411,7 +401,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       }
     }
 
-    // 4. Persistir todos los cambios en Supabase
     for (const update of updates) {
       const { error } = await supabase
         .from('loan_installments')
@@ -422,11 +411,96 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           status: update.status,
         })
         .eq('id', update.id);
-
-      if (error) {
-        console.error(`Error actualizando cuota ${update.id}:`, error.message);
-      }
+      if (error) console.error(`Error actualizando cuota ${update.id}:`, error.message);
     }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // REPAIR FULL SCHEDULE — RECALCULAR PLAN DESDE SALDO ACTUAL
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const repairFullSchedule = async () => {
+    if (!selectedLoan || loanInstallments.length === 0) return;
+
+    const confirmed = window.confirm(
+      `¿Recalcular todas las cuotas PENDIENTES del crédito de ${selectedLoan.client_name} desde el saldo actual?\n\nEsto corrige cualquier error en el plan de pagos existente.`
+    );
+    if (!confirmed) return;
+
+    const rate = getLoanRate(selectedLoan, loanInstallments);
+
+    if (!rate || rate <= 0) {
+      alert('Error: No se pudo determinar la tasa del crédito.');
+      return;
+    }
+
+    const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+    if (!fixedQuota || fixedQuota <= 0) {
+      alert('Error: No se pudo determinar la cuota fija del crédito.');
+      return;
+    }
+
+    const pendingInstallments = loanInstallments
+      .filter((i) => i.status === 'PENDING')
+      .sort((a, b) => a.installment_number - b.installment_number);
+
+    if (pendingInstallments.length === 0) {
+      alert('No hay cuotas pendientes para recalcular.');
+      return;
+    }
+
+    // Saldo actual real = capital original - capital ya pagado (incluye abonos extra)
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const capitalYaPagado = loanInstallments
+      .filter((i) => i.status === 'PAID' || i.status === 'LATE')
+      .reduce((sum, i) => sum + Number(i.principal_portion), 0);
+
+    let currentBalance = capitalOriginal - capitalYaPagado;
+    if (currentBalance < 0) currentBalance = 0;
+
+    for (let i = 0; i < pendingInstallments.length; i++) {
+      const inst = pendingInstallments[i];
+
+      if (currentBalance <= 0.5) {
+        await supabase.from('loan_installments').update({
+          expected_amount: 0,
+          principal_portion: 0,
+          interest_portion: 0,
+          status: 'PAID_EARLY',
+        }).eq('id', inst.id);
+        continue;
+      }
+
+      const interest = Math.round(currentBalance * rate);
+      let principal = fixedQuota - interest;
+
+      // Cuota de cierre: saldar exactamente lo que queda
+      if (principal >= currentBalance) {
+        principal = Math.round(currentBalance);
+        await supabase.from('loan_installments').update({
+          expected_amount: principal + interest,
+          principal_portion: principal,
+          interest_portion: interest,
+          status: 'PENDING',
+        }).eq('id', inst.id);
+        currentBalance = 0;
+        continue;
+      }
+
+      principal = Math.round(principal);
+
+      await supabase.from('loan_installments').update({
+        expected_amount: principal + interest,
+        principal_portion: principal,
+        interest_portion: interest,
+        status: 'PENDING',
+      }).eq('id', inst.id);
+
+      currentBalance = Math.round(currentBalance - principal);
+    }
+
+    alert('¡Plan de pagos recalculado correctamente!');
+    await fetchInstallments(selectedLoan.id);
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -442,9 +516,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const moraCobrada =
         parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g, '')) || 0;
       const cuotaBase =
-        parseFloat(
-          selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')
-        ) || 0;
+        parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')) || 0;
 
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
@@ -474,9 +546,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           abonoCapitalExtra,
           paymentData.extraPaymentType as 'REDUCE_TIME' | 'REDUCE_QUOTA'
         );
-        alert(
-          `¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`
-        );
+        alert(`¡Pago registrado! Abono extra a capital de ${formatCurrency(abonoCapitalExtra)} aplicado con éxito.`);
       } else {
         alert('¡Pago registrado con éxito!');
       }
@@ -495,9 +565,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const capitalOriginal = Number(
-      selectedLoan.principal_amount || selectedLoan.loan_amount
-    );
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     const capitalYaPagado = loanInstallments
       .filter((i) => i.status === 'PAID' || i.status === 'LATE')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
@@ -510,9 +578,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     let csvContent =
       'data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n';
 
-    let tempBalanceForExcel = Number(
-      selectedLoan.principal_amount || selectedLoan.loan_amount
-    );
+    let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
 
     loanInstallments.forEach((row, index) => {
       if (row.status !== 'PAID_EARLY') {
@@ -524,9 +590,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
         const costosAsociados =
           index === 0
-            ? Number(
-                selectedLoan.associated_costs || selectedLoan.origination_costs || 0
-              )
+            ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
             : 0;
         const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
 
@@ -551,10 +615,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute(
-      'download',
-      `PlanPagos_${selectedLoan.client_name.replace(/ /g, '_')}.csv`
-    );
+    link.setAttribute('download', `PlanPagos_${selectedLoan.client_name.replace(/ /g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -569,29 +630,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'PAID':
-        return (
-          <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">
-            Al día
-          </span>
-        );
+        return <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">Al día</span>;
       case 'LATE':
-        return (
-          <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">
-            Mora
-          </span>
-        );
+        return <span className="px-2 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs font-semibold">Mora</span>;
       case 'PAID_EARLY':
-        return (
-          <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">
-            Anulada
-          </span>
-        );
+        return <span className="px-2 py-1 bg-slate-500/10 text-slate-400 border border-slate-500/20 rounded-full text-xs font-semibold">Anulada</span>;
       default:
-        return (
-          <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">
-            Pendiente
-          </span>
-        );
+        return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-xs font-semibold">Pendiente</span>;
     }
   };
 
@@ -623,41 +668,25 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="flex items-center gap-1 bg-slate-800/50 rounded-xl p-1 border border-slate-700/50">
             <button
               onClick={() => setActiveTab('solicitudes')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                activeTab === 'solicitudes'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'solicitudes' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
             >
               <FileText className="w-4 h-4" /> Solicitudes Web
             </button>
             <button
               onClick={() => setActiveTab('cartera')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                activeTab === 'cartera'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'cartera' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
             >
               <Wallet className="w-4 h-4" /> Cartera Activa
             </button>
             <button
               onClick={() => setActiveTab('simulador')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                activeTab === 'simulador'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'simulador' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
             >
               <Calculator className="w-4 h-4" /> Nuevo Crédito
             </button>
             <button
               onClick={() => setActiveTab('configuracion')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                activeTab === 'configuracion'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${activeTab === 'configuracion' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
             >
               <Settings className="w-4 h-4" /> Configuración
             </button>
@@ -676,48 +705,36 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       <div className="max-w-7xl mx-auto px-6 py-8">
 
-        {/* PESTAÑA: SIMULADOR */}
+        {/* SIMULADOR */}
         {activeTab === 'simulador' && <LoanOriginationEngine />}
 
-        {/* PESTAÑA: CONFIGURACIÓN */}
+        {/* CONFIGURACIÓN */}
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
-              <h2 className="text-xl font-bold text-white mb-6">
-                Tasas de Mora Diaria (Usura)
-              </h2>
+              <h2 className="text-xl font-bold text-white mb-6">Tasas de Mora Diaria (Usura)</h2>
               <form
                 onSubmit={handleAddUsuryRate}
                 className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8"
               >
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Mes
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
                   <select
                     value={newRate.month}
-                    onChange={(e) =>
-                      setNewRate({ ...newRate, month: Number(e.target.value) })
-                    }
+                    onChange={(e) => setNewRate({ ...newRate, month: Number(e.target.value) })}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
                   >
                     {monthNames.map((m, i) => (
-                      <option key={i} value={i + 1}>
-                        {m}
-                      </option>
+                      <option key={i} value={i + 1}>{m}</option>
                     ))}
                   </select>
                 </div>
                 <div className="flex-1">
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
-                    Año
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Año</label>
                   <input
                     type="number"
                     value={newRate.year}
-                    onChange={(e) =>
-                      setNewRate({ ...newRate, year: Number(e.target.value) })
-                    }
+                    onChange={(e) => setNewRate({ ...newRate, year: Number(e.target.value) })}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -777,91 +794,23 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </div>
         )}
 
-        {/* PESTAÑA: CARTERA */}
+        {/* CARTERA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
 
             {/* LISTA DE CRÉDITOS */}
-            <div
-              className={`${
-                selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'
-              } bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}
-            >
+            <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
               <div className="p-6 border-b border-slate-700/50">
                 <h2 className="text-xl font-bold text-white mb-4">Créditos Otorgados</h2>
                 {!selectedLoan && (
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 flex justify-between">
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                        Capital Colocado
-                      </p>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Colocado</p>
                       <p className="text-xl font-bold text-emerald-400 font-mono">
-                        {formatCurrency(
-                          activeLoans.reduce(
-                            (sum, loan) =>
-                              sum + Number(loan.principal_amount || loan.loan_amount),
-                            0
-                          )
-                        )}
+                        {formatCurrency(activeLoans.reduce((sum, loan) => sum + Number(loan.principal_amount || loan.loan_amount), 0))}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                        Créditos Activos
-                      </p>
-                      <p className="text-xl font-bold text-slate-200 font-mono">
-                        {activeLoans.length}
-                      </p>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Créditos Activos</p>
+                      <p className="text-xl font-bold text-slate-200 font-mono">{activeLoans.length}</p>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50">
-                    <tr>
-                      <th className="p-4">Cliente</th>
-                      <th className="p-4 text-right">Monto</th>
-                      {!selectedLoan && <th className="p-4 text-center">Detalle</th>}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50">
-                    {activeLoans.map((loan) => (
-                      <tr
-                        key={loan.id}
-                        onClick={() => handleSelectLoan(loan)}
-                        className={`cursor-pointer transition-colors ${
-                          selectedLoan?.id === loan.id
-                            ? 'bg-emerald-500/10 border-l-4 border-emerald-500'
-                            : 'hover:bg-slate-700/20'
-                        }`}
-                      >
-                        <td className="p-4">
-                          <p className="font-bold text-slate-200 text-sm truncate">
-                            {loan.client_name}
-                          </p>
-                          <p className="text-xs text-slate-500 font-mono">
-                            {loan.client_id_number || loan.client_id}
-                          </p>
-                        </td>
-                        <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">
-                          {formatCurrency(loan.principal_amount || loan.loan_amount)}
-                        </td>
-                        {!selectedLoan && (
-                          <td className="p-4 text-center">
-                            <button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg">
-                              <Eye size={16} />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* DETALLE DEL CRÉDITO SELECCIONADO */}
-            {selectedLoan && (
-              <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6
