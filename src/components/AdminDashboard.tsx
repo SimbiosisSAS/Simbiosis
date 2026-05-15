@@ -31,12 +31,6 @@ const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
     extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
   
-  actualDate: new Date().toISOString().split('T')[0],
-  actualAmount: 0,
-  lateFee: 0,
-  daysLate: 0,
-  extraPaymentType: 'REDUCE_TIME'
-});
 const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos'); // ← NUEVA LÍNEA
 
  useEffect(() => {
