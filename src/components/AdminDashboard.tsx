@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp } from 'lucide-react'; // ← se agrega TrendingUp al final
 import LoanOriginationEngine from './LoanOriginationEngine';
+import IndicadoresCartera from './IndicadoresCartera'; // ← línea nueva
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador' | 'configuracion';
 
@@ -576,7 +577,31 @@ const handleDeleteApplication = async (appId: string) => {
         )}
 
         {activeTab === 'cartera' && (
-          <div className="grid lg:grid-cols-3 gap-6">
+  <div className="space-y-6">
+
+    {/* SUB-NAVEGACIÓN */}
+    <div className="flex gap-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1 w-fit">
+      <button
+        onClick={() => setCarteraView('creditos')}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView === 'creditos' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+      >
+        <Wallet className="w-4 h-4" /> Créditos
+      </button>
+      <button
+        onClick={() => { setCarteraView('indicadores'); setSelectedLoan(null); }}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView === 'indicadores' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'}`}
+      >
+        <TrendingUp className="w-4 h-4" /> Indicadores
+      </button>
+    </div>
+
+    {/* VISTA: INDICADORES */}
+    {carteraView === 'indicadores' && <IndicadoresCartera />}
+
+    {/* VISTA: CRÉDITOS (lo que ya existe) */}
+    {carteraView === 'creditos' && (
+    <div className="grid lg:grid-cols-3 gap-6">
+      
             <div className={`${selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
               <div className="p-6 border-b border-slate-700/50">
                 <h2 className="text-xl font-bold text-white mb-4">Créditos Otorgados</h2>
@@ -757,8 +782,10 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
                 )}
               </div>
             )}
-          </div>
+           </div>
         )}
+      </div>
+    )}
 
         {/* PESTAÑA 3: SOLICITUDES WEB */}
         {activeTab === 'solicitudes' && (
