@@ -367,17 +367,23 @@ const calculatePazYSalvo = () => {
     ? Math.round(saldoActual * (Math.pow(1 + rate, diasTranscurridos / 30) - 1))
     : 0;
 
-  // Moras pendientes en cuotas vencidas
-  const morasPendientes = loanInstallments
-    .filter(i => i.status === 'PENDING')
-    .reduce((sum, i) => {
-      const fechaEsperada = new Date(i.expected_payment_date);
-      fechaEsperada.setHours(0, 0, 0, 0);
-      if (fechaEsperada < hoy) {
-        return sum + Number(i.late_fee_charged || 0);
-      }
-      return sum;
-    }, 0);
+  // Moras calculadas en tiempo real para cuotas vencidas
+const hoyStr = hoy.toISOString().split('T')[0];
+const morasPendientes = loanInstallments
+  .filter(i => i.status === 'PENDING')
+  .reduce((sum, i) => {
+    const fechaEsperada = new Date(i.expected_payment_date);
+    fechaEsperada.setHours(0, 0, 0, 0);
+    if (fechaEsperada < hoy) {
+      const moraCalc = calculateLateFee(
+        i.expected_payment_date,
+        hoyStr,
+        Number(i.expected_amount)
+      );
+      return sum + moraCalc.penalty;
+    }
+    return sum;
+  }, 0);
 
   const totalAPagar = saldoActual + interesCorrido + morasPendientes;
 
