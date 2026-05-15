@@ -1160,6 +1160,7 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
     </div>
   </div>
 )}
+        
       {/* MODAL DE PAGO */}
       {showPaymentModal && selectedInstallment && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
