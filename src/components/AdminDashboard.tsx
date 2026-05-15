@@ -451,7 +451,20 @@ if (abonoCapitalExtra > 0) {
       alert('Error actualizando estado: ' + err.message);
     }
   };
-
+const handleDeleteApplication = async (appId: string) => {
+    const confirmDelete = window.confirm('¿Estás seguro de que quieres eliminar esta solicitud permanentemente?');
+    if (confirmDelete) {
+      try {
+        const { error } = await supabase.from('credit_applications').delete().eq('id', appId);
+        if (error) throw error;
+        alert('Solicitud eliminada.');
+        fetchApplications();
+        setSelectedApp(null);
+      } catch (err: any) {
+        alert('Error eliminando solicitud: ' + err.message);
+      }
+    }
+  };
   const formatCurrency = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '$ 0';
