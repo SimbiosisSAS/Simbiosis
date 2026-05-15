@@ -460,6 +460,22 @@ if (inst.status === 'PENDING') {
 
   const totalIntereses = loanInstallments.reduce((s, i) => s + Number(i.interest_portion), 0);
   const hoyDocStr = new Date().toISOString().split('T')[0];
+  const hoyDocDate = new Date(); hoyDocDate.setHours(0,0,0,0);
+
+const cuotasVencidas = loanInstallments.filter(i => {
+  if (i.status !== 'PENDING') return false;
+  const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
+  return f < hoyDocDate;
+});
+const cuotasFuturas = loanInstallments.filter(i => {
+  if (i.status !== 'PENDING') return false;
+  const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
+  return f >= hoyDocDate;
+});
+const totalCuotasVencidas = cuotasVencidas.reduce((s, i) => s + Number(i.expected_amount), 0);
+const totalCuotasFuturas = cuotasFuturas.reduce((s, i) => s + Number(i.expected_amount), 0);
+const totalARegularizar = totalCuotasVencidas + totalMoras;
+const totalDeudaHoy = totalARegularizar + totalCuotasFuturas;
 const totalMoras = loanInstallments.reduce((s, i) => {
   if (i.status === 'PENDING') {
     const fechaEsp = new Date(i.expected_payment_date);
@@ -585,6 +601,35 @@ const totalMoras = loanInstallments.reduce((s, i) => {
         <div class="summary-card" style="background:#fff7ed; border-color:#fed7aa;">
           <div class="info-label">Saldo Pendiente</div>
           <div class="info-value" style="color:#c2410c;">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div>
+        </div>
+      </div>
+<div style="margin-top: 24px; border: 2px solid #dc2626; border-radius: 8px; overflow: hidden;">
+        <div style="background: #dc2626; padding: 10px 16px;">
+          <p style="color: white; font-weight: bold; font-size: 13px; margin: 0;">Resumen de Deuda a la Fecha — ${new Date().toLocaleDateString('es-CO')}</p>
+        </div>
+        <div style="padding: 16px; background: #fff5f5;">
+          <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+            <tr style="border-bottom: 1px solid #fecaca;">
+              <td style="padding: 8px 4px; color: #374151;">Cuotas vencidas sin pagar (${cuotasVencidas.length})</td>
+              <td style="padding: 8px 4px; text-align: right; font-weight: bold; color: #dc2626;">$ ${Math.round(totalCuotasVencidas).toLocaleString('es-CO')}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #fecaca;">
+              <td style="padding: 8px 4px; color: #374151;">Mora acumulada</td>
+              <td style="padding: 8px 4px; text-align: right; font-weight: bold; color: #dc2626;">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</td>
+            </tr>
+            <tr style="border-bottom: 2px solid #dc2626; background: #fee2e2;">
+              <td style="padding: 10px 4px; font-weight: bold; color: #991b1b;">TOTAL A REGULARIZAR HOY</td>
+              <td style="padding: 10px 4px; text-align: right; font-weight: bold; font-size: 15px; color: #991b1b;">$ ${Math.round(totalARegularizar).toLocaleString('es-CO')}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e5e7eb;">
+              <td style="padding: 8px 4px; color: #6b7280;">Cuotas futuras pendientes (${cuotasFuturas.length})</td>
+              <td style="padding: 8px 4px; text-align: right; color: #6b7280;">$ ${Math.round(totalCuotasFuturas).toLocaleString('es-CO')}</td>
+            </tr>
+            <tr style="background: #f0fdf4;">
+              <td style="padding: 10px 4px; font-weight: bold; color: #065f46;">DEUDA TOTAL DEL CRÉDITO</td>
+              <td style="padding: 10px 4px; text-align: right; font-weight: bold; font-size: 15px; color: #065f46;">$ ${Math.round(totalDeudaHoy).toLocaleString('es-CO')}</td>
+            </tr>
+          </table>
         </div>
       </div>
 
