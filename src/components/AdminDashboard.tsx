@@ -259,7 +259,16 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
       console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
 
-      const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
+      let nuevoPrincipalPagadoEstaCuota: number;
+
+if (abonoCapitalExtra > 0) {
+  // Pago con excedente → capital planificado + lo extra
+  nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + abonoCapitalExtra;
+} else {
+  // Pago normal o parcial → capital real = lo que pagó menos interés y mora
+  const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - moraCobrada;
+  nuevoPrincipalPagadoEstaCuota = Math.max(Math.round(capitalReal), 0);
+}
 
       const { error } = await supabase.from('loan_installments').update({
         status: status,
