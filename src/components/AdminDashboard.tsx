@@ -2,12 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
 import {
-  CheckCircle,
-  XCircle,
-  Clock,
   Eye,
   Sparkles,
-  Filter,
   FileText,
   Calculator,
   LogOut,
@@ -143,7 +139,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const confirmDelete = window.confirm(
       `¿Estás seguro de que quieres ELIMINAR el crédito de ${selectedLoan.client_name}? Se borrará todo su historial de pagos y no se puede deshacer.`
     );
-
     if (confirmDelete) {
       try {
         const { error } = await supabase
@@ -204,7 +199,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       currentLateDay.setDate(expected.getDate() + i);
       const currentMonth = currentLateDay.getMonth() + 1;
       const currentYear = currentLateDay.getFullYear();
-
       const rateRecord = usuryRates.find(
         (r) => r.period_month === currentMonth && r.period_year === currentYear
       );
@@ -225,7 +219,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       today,
       installment.expected_amount
     );
-
     setSelectedInstallment(installment);
     setPaymentData({
       actualDate: today,
@@ -275,8 +268,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     if (futureInstallments.length === 0) return;
 
     // 2. Calcular el nuevo saldo real después del abono extra
-    // La suma de los principal_portion pendientes = saldo adeudado
-    // antes del abono extra (ya descontada la cuota normal actual).
     const saldoPendienteAnterior = futureInstallments.reduce(
       (sum, i) => sum + Number(i.principal_portion),
       0
@@ -285,15 +276,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     let newBalance = saldoPendienteAnterior - excedenteCapital;
     if (newBalance < 0) newBalance = 0;
 
-    // 3. Validar la tasa nominal mensual
-    // El campo nominal_rate_mv se asume guardado como porcentaje (ej: 1 para 1% MV).
-    // Si tu BD guarda el decimal directamente (0.01), elimina el /100.
-    const rate = Number(selectedLoan.nominal_rate_mv) / 100;
+    // 3. Detectar la tasa mensual — interest_rate_monthly es el campo real en active_loans
+    const rateRaw =
+      selectedLoan.interest_rate_monthly ??
+      selectedLoan.nominal_rate_mv ??
+      null;
+
+    let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
+
+    // Fallback: derivar la tasa del interés de la primera cuota si los campos están vacíos
+    if (!rate || rate <= 0) {
+      const primerasCuotas = loanInstallments.filter((i) => i.installment_number === 1);
+      const principalAmount = Number(
+        selectedLoan.principal_amount || selectedLoan.loan_amount
+      );
+      if (primerasCuotas.length > 0 && principalAmount > 0) {
+        rate = Number(primerasCuotas[0].interest_portion) / principalAmount;
+        console.warn(`Tasa derivada de cuota 1: ${(rate * 100).toFixed(4)}% MV`);
+      }
+    }
 
     if (!rate || rate <= 0) {
-      alert(
-        'Error: La tasa nominal del crédito es inválida o cero. Verifica el campo nominal_rate_mv en Supabase.'
-      );
+      alert('Error crítico: No se pudo determinar la tasa del crédito. Verifica el campo interest_rate_monthly en Supabase.');
       return;
     }
 
@@ -308,15 +312,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     let currentBalance = newBalance;
 
     // ── ESTRATEGIA A: REDUCE_QUOTA ──────────────────────────────────────────
-    // Nueva cuota fija con el nuevo saldo y los mismos n períodos restantes.
     if (strategy === 'REDUCE_QUOTA') {
       const n = futureInstallments.length;
-
       const newFixedQuota =
         currentBalance <= 0
           ? 0
-          : currentBalance *
-            (rate * Math.pow(1 + rate, n)) /
+          : (currentBalance * (rate * Math.pow(1 + rate, n))) /
             (Math.pow(1 + rate, n) - 1);
 
       for (let i = 0; i < futureInstallments.length; i++) {
@@ -333,11 +334,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           continue;
         }
 
-        // Redondear el interés aquí para evitar drift acumulado
         const interest = Math.round(currentBalance * rate);
         let principal = Math.round(newFixedQuota) - interest;
 
-        // Ajuste de última cuota: pagar exactamente lo que queda
         if (principal >= currentBalance || i === futureInstallments.length - 1) {
           principal = Math.round(currentBalance);
         }
@@ -356,14 +355,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       }
 
     // ── ESTRATEGIA B: REDUCE_TIME ───────────────────────────────────────────
-    // La cuota mensual NO cambia. Lo que cambia es cuántas cuotas quedan.
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
 
       if (!fixedQuota || fixedQuota <= 0) {
-        alert(
-          'Error: El monto de cuota fija del crédito es inválido. Verifica el campo fixed_quota_amount en Supabase.'
-        );
+        alert('Error: El monto de cuota fija del crédito es inválido. Verifica el campo fixed_quota_amount en Supabase.');
         return;
       }
 
@@ -384,12 +380,10 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           continue;
         }
 
-        // Calcular interés sobre el saldo real actual
         const interest = Math.round(currentBalance * rate);
         let principal = fixedQuota - interest;
 
-        // Si el saldo restante es menor que el capital normal de esta cuota
-        // → cuota de cierre: pagar exactamente lo que queda
+        // Cuota de cierre: pagar exactamente lo que queda
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
           updates.push({
@@ -448,7 +442,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       const moraCobrada =
         parseFloat(paymentData.lateFee.toString().replace(/[^0-9.-]+/g, '')) || 0;
       const cuotaBase =
-        parseFloat(selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')) || 0;
+        parseFloat(
+          selectedInstallment.expected_amount.toString().replace(/[^0-9.-]+/g, '')
+        ) || 0;
 
       const isLate = paymentData.daysLate > 0;
       const status = isLate ? 'LATE' : 'PAID';
@@ -499,15 +495,12 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
-
     const capitalOriginal = Number(
       selectedLoan.principal_amount || selectedLoan.loan_amount
     );
-
     const capitalYaPagado = loanInstallments
       .filter((i) => i.status === 'PAID' || i.status === 'LATE')
       .reduce((sum, i) => sum + Number(i.principal_portion), 0);
-
     const saldo = capitalOriginal - capitalYaPagado;
     return saldo > 0 ? saldo : 0;
   };
@@ -527,12 +520,13 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         const capitalRestar = Number(row.principal_portion);
         let saldoFinal = saldoInicio - capitalRestar;
         if (saldoFinal < 0) saldoFinal = 0;
-
         tempBalanceForExcel = saldoFinal;
 
         const costosAsociados =
           index === 0
-            ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
+            ? Number(
+                selectedLoan.associated_costs || selectedLoan.origination_costs || 0
+              )
             : 0;
         const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
 
@@ -689,7 +683,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         {activeTab === 'configuracion' && (
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
-              <h2 className="text-xl font-bold text-white mb-2">
+              <h2 className="text-xl font-bold text-white mb-6">
                 Tasas de Mora Diaria (Usura)
               </h2>
               <form
@@ -702,7 +696,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   </label>
                   <select
                     value={newRate.month}
-                    onChange={(e) => setNewRate({ ...newRate, month: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setNewRate({ ...newRate, month: Number(e.target.value) })
+                    }
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
                   >
                     {monthNames.map((m, i) => (
@@ -719,7 +715,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                   <input
                     type="number"
                     value={newRate.year}
-                    onChange={(e) => setNewRate({ ...newRate, year: Number(e.target.value) })}
+                    onChange={(e) =>
+                      setNewRate({ ...newRate, year: Number(e.target.value) })
+                    }
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -782,6 +780,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         {/* PESTAÑA: CARTERA */}
         {activeTab === 'cartera' && (
           <div className="grid lg:grid-cols-3 gap-6">
+
+            {/* LISTA DE CRÉDITOS */}
             <div
               className={`${
                 selectedLoan ? 'lg:col-span-1' : 'lg:col-span-3'
@@ -862,5 +862,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
               </div>
             </div>
 
+            {/* DETALLE DEL CRÉDITO SELECCIONADO */}
             {selectedLoan && (
-              <div className="lg:col-span-2 bg
+              <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6
