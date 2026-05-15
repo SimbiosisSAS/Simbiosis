@@ -443,9 +443,9 @@ if (inst.status === 'PENDING') {
           <td style="padding: 8px; text-align:right;">${costos > 0 ? '$ ' + costos.toLocaleString('es-CO') : '--'}</td>
           <td style="padding: 8px; text-align:right;">$ ${Math.round(capital).toLocaleString('es-CO')}</td>
           <td style="padding: 8px; text-align:right;">$ ${Math.round(Number(inst.interest_portion)).toLocaleString('es-CO')}</td>
-          <td style="padding: 8px; text-align:right; color: ${Number(inst.late_fee_charged) > 0 ? '#dc2626' : '#6b7280'};">
-            ${Number(inst.late_fee_charged) > 0 ? '$ ' + Math.round(Number(inst.late_fee_charged)).toLocaleString('es-CO') : '--'}
-          </td>
+          <td style="padding: 8px; text-align:right; color: ${moraFila > 0 ? '#dc2626' : '#6b7280'};">
+  ${moraFila > 0 ? '$ ' + Math.round(moraFila).toLocaleString('es-CO') : '--'}
+</td>
           <td style="padding: 8px; text-align:right; font-weight:bold;">$ ${Math.round(Number(inst.expected_amount)).toLocaleString('es-CO')}</td>
           <td style="padding: 8px; text-align:right;">$ ${Math.round(saldoFinal).toLocaleString('es-CO')}</td>
           <td style="padding: 8px; text-align:center;">
@@ -460,7 +460,19 @@ if (inst.status === 'PENDING') {
     }).join('');
 
   const totalIntereses = loanInstallments.reduce((s, i) => s + Number(i.interest_portion), 0);
-  const totalMoras = loanInstallments.reduce((s, i) => s + Number(i.late_fee_charged || 0), 0);
+  const hoyDocStr = new Date().toISOString().split('T')[0];
+const totalMoras = loanInstallments.reduce((s, i) => {
+  if (i.status === 'PENDING') {
+    const fechaEsp = new Date(i.expected_payment_date);
+    fechaEsp.setHours(0, 0, 0, 0);
+    const hoyD = new Date(); hoyD.setHours(0, 0, 0, 0);
+    if (fechaEsp < hoyD) {
+      const m = calculateLateFee(i.expected_payment_date, hoyDocStr, Number(i.expected_amount));
+      return s + m.penalty;
+    }
+  }
+  return s + Number(i.late_fee_charged || 0);
+}, 0);
   const totalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
   const saldoVivo = calculateCurrentBalance();
 
