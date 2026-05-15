@@ -332,7 +332,67 @@ const repairFullSchedule = async () => {
   await fetchInstallments(selectedLoan.id);
 };
 const calculatePazYSalvo = () => {
-  // ... toda la función ...
+  if (!selectedLoan || loanInstallments.length === 0) return;
+
+  const rateRaw = selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? null;
+  let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
+  if (!rate || rate <= 0) {
+    const primera = loanInstallments.find(i => i.installment_number === 1);
+    const principal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
+  }
+
+  const saldoActual = calculateCurrentBalance();
+
+  // Última fecha de pago o fecha de desembolso
+  const pagadas = loanInstallments
+    .filter(i => i.status === 'PAID' || i.status === 'LATE')
+    .sort((a, b) => b.installment_number - a.installment_number);
+
+  const ultimaFecha = pagadas.length > 0
+    ? new Date(pagadas[0].actual_payment_date || pagadas[0].expected_payment_date)
+    : new Date(selectedLoan.disbursement_date);
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  ultimaFecha.setHours(0, 0, 0, 0);
+
+  const diasTranscurridos = Math.max(
+    0,
+    Math.floor((hoy.getTime() - ultimaFecha.getTime()) / 86400000)
+  );
+
+  // Interés corrido: saldo * ((1 + tasa_mensual)^(días/30) - 1)
+  const interesCorrido = diasTranscurridos > 0
+    ? Math.round(saldoActual * (Math.pow(1 + rate, diasTranscurridos / 30) - 1))
+    : 0;
+
+  // Moras pendientes en cuotas vencidas
+  const morasPendientes = loanInstallments
+    .filter(i => i.status === 'PENDING')
+    .reduce((sum, i) => {
+      const fechaEsperada = new Date(i.expected_payment_date);
+      fechaEsperada.setHours(0, 0, 0, 0);
+      if (fechaEsperada < hoy) {
+        return sum + Number(i.late_fee_charged || 0);
+      }
+      return sum;
+    }, 0);
+
+  const totalAPagar = saldoActual + interesCorrido + morasPendientes;
+
+  setPazYSalvoData({
+    saldoActual,
+    diasTranscurridos,
+    interesCorrido,
+    morasPendientes,
+    totalAPagar,
+    fechaCalculo: hoy.toLocaleDateString('es-CO'),
+    ultimaFecha: ultimaFecha.toLocaleDateString('es-CO'),
+  });
+
+  setShowPazYSalvoModal(true);
+};
 };
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
