@@ -414,7 +414,7 @@ const generarEstadoCuenta = () => {
       let saldoFinal = Math.max(saldoInicio - capital, 0);
       saldoTemp = saldoFinal;
       const costos = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-const costos = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+
 let moraFila = Number(inst.late_fee_charged || 0);
 if (inst.status === 'PENDING') {
   const fechaEsp = new Date(inst.expected_payment_date);
