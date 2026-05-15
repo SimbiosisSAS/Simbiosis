@@ -224,7 +224,8 @@ const repairFullSchedule = async () => {
   if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
 
   // Calcular saldo real actual
-  const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+  const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) 
+  + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
   const capitalPagado = loanInstallments
     .filter(i => i.status === 'PAID' || i.status === 'LATE')
     .reduce((s, i) => s + Number(i.principal_portion), 0);
@@ -383,7 +384,8 @@ if (abonoCapitalExtra > 0) {
   const calculateCurrentBalance = () => {
     if (!selectedLoan || loanInstallments.length === 0) return 0;
     
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) 
+  + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
     
     const capitalYaPagado = loanInstallments
       .filter(i => i.status === 'PAID' || i.status === 'LATE')
@@ -408,7 +410,7 @@ if (abonoCapitalExtra > 0) {
       tempBalanceForExcel = saldoFinal;
 
       const costosAsoc = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-      const vrCuota = Number(row.expected_amount) + costosAsoc;
+const vrCuota = Number(row.expected_amount); // costos ya capitalizados en la cuota
       const mora = row.late_fee_charged > 0 ? row.late_fee_charged : 0;
 
       const rowData = [
@@ -701,7 +703,7 @@ const handleDeleteApplication = async (appId: string) => {
                               tempBalanceForTable = saldoFinal;
 
                               const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-                              const valorCuotaTotal = Number(inst.expected_amount) + costosAsociados;
+const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados en la cuota
 
                               return (
                                 <tr key={inst.id} className="hover:bg-slate-800/50 transition-colors">
