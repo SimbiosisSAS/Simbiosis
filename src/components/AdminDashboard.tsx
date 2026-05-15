@@ -27,7 +27,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     actualAmount: 0,
     lateFee: 0,
     daysLate: 0,
-    extraPaymentType: 'REDUCE_TIME'
+    extraPaymentType: 'REDUCE_TIME' // 'REDUCE_TIME' o 'REDUCE_QUOTA'
   });
 
   useEffect(() => {
@@ -154,171 +154,93 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }));
   };
 
-  // --- FUNCIÓN A REESCRIBIR POR CLAUDE ---
   const recalculateFutureInstallments = async (excedenteCapital: number, strategy: 'REDUCE_TIME' | 'REDUCE_QUOTA') => {
-  if (!selectedLoan || !selectedInstallment) return;
-  const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
-  if (futureInstallments.length === 0) return;
-  const saldoPendiente = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-  let newBalance = Math.max(saldoPendiente - excedenteCapital, 0);
-  const rateRaw = selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? null;
-  let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
-  if (!rate || rate <= 0) {
-    const primera = loanInstallments.find(i => i.installment_number === 1);
-    const principal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
-  }
-  if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa del crédito.'); return; }
-  const updates: any[] = [];
-  let currentBalance = newBalance;
-  if (strategy === 'REDUCE_QUOTA') {
-    const n = futureInstallments.length;
-    const newFixedQuota = currentBalance <= 0 ? 0 : (currentBalance * (rate * Math.pow(1 + rate, n))) / (Math.pow(1 + rate, n) - 1);
-    for (let i = 0; i < futureInstallments.length; i++) {
-      const inst = futureInstallments[i];
-      if (currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
-      const interest = Math.round(currentBalance * rate);
-      let principal = Math.round(newFixedQuota) - interest;
-      if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
-      if (principal < 0) principal = 0;
-      updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
-      currentBalance = Math.round(currentBalance - principal);
+    if (!selectedLoan || !selectedInstallment) return;
+    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
+    if (futureInstallments.length === 0) return;
+    const saldoPendiente = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
+    let newBalance = Math.max(saldoPendiente - excedenteCapital, 0);
+    const rateRaw = selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? null;
+    let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
+    if (!rate || rate <= 0) {
+      const primera = loanInstallments.find(i => i.installment_number === 1);
+      const principal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+      if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
     }
-  } else {
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa del crédito.'); return; }
+    const updates: any[] = [];
+    let currentBalance = newBalance;
+    if (strategy === 'REDUCE_QUOTA') {
+      const n = futureInstallments.length;
+      const newFixedQuota = currentBalance <= 0 ? 0 : (currentBalance * (rate * Math.pow(1 + rate, n))) / (Math.pow(1 + rate, n) - 1);
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        if (currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
+        const interest = Math.round(currentBalance * rate);
+        let principal = Math.round(newFixedQuota) - interest;
+        if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
+        if (principal < 0) principal = 0;
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+        currentBalance = Math.round(currentBalance - principal);
+      }
+    } else {
+      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
+      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
+      let done = false;
+      for (let i = 0; i < futureInstallments.length; i++) {
+        const inst = futureInstallments[i];
+        if (done || currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
+        const interest = Math.round(currentBalance * rate);
+        let principal = fixedQuota - interest;
+        if (principal >= currentBalance) {
+          principal = Math.round(currentBalance);
+          updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+          currentBalance = 0; done = true; continue;
+        }
+        principal = Math.round(principal);
+        currentBalance = Math.round(currentBalance - principal);
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+      }
+    }
+    for (const u of updates) {
+      await supabase.from('loan_installments').update({ expected_amount: u.expected_amount, principal_portion: u.principal_portion, interest_portion: u.interest_portion, status: u.status }).eq('id', u.id);
+    }
+  };
+
+  const repairFullSchedule = async () => {
+    if (!selectedLoan || loanInstallments.length === 0) return;
+    if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES de ${selectedLoan.client_name} desde el saldo actual?`)) return;
+    const rateRaw = selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? null;
+    let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
+    if (!rate || rate <= 0) {
+      const primera = loanInstallments.find(i => i.installment_number === 1);
+      const principal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+      if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
+    }
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
     const fixedQuota = Number(selectedLoan.fixed_quota_amount);
     if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
-    let done = false;
-    for (let i = 0; i < futureInstallments.length; i++) {
-      const inst = futureInstallments[i];
-      if (done || currentBalance <= 0.5) { updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }); continue; }
+    const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
+    if (pending.length === 0) { alert('No hay cuotas pendientes.'); return; }
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
+    const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
+    let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
+    for (let i = 0; i < pending.length; i++) {
+      const inst = pending[i];
+      if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
       const interest = Math.round(currentBalance * rate);
       let principal = fixedQuota - interest;
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
-        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
-        currentBalance = 0; done = true; continue;
+        await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
+        currentBalance = 0; continue;
       }
       principal = Math.round(principal);
-      currentBalance = Math.round(currentBalance - principal);
-      updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
-    }
-  }
-  for (const u of updates) {
-    await supabase.from('loan_installments').update({ expected_amount: u.expected_amount, principal_portion: u.principal_portion, interest_portion: u.interest_portion, status: u.status }).eq('id', u.id);
-  }
-};
-  const repairFullSchedule = async () => {
-  if (!selectedLoan || loanInstallments.length === 0) return;
-  if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES de ${selectedLoan.client_name} desde el saldo actual?`)) return;
-  const rateRaw = selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? null;
-  let rate = rateRaw !== null ? Number(rateRaw) / 100 : 0;
-  if (!rate || rate <= 0) {
-    const primera = loanInstallments.find(i => i.installment_number === 1);
-    const principal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-    if (primera && principal > 0) rate = Number(primera.interest_portion) / principal;
-  }
-  if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
-  const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-  if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
-  const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
-  if (pending.length === 0) { alert('No hay cuotas pendientes.'); return; }
-  const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
-  const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
-  let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
-  for (let i = 0; i < pending.length; i++) {
-    const inst = pending[i];
-    if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
-    const interest = Math.round(currentBalance * rate);
-    let principal = fixedQuota - interest;
-    if (principal >= currentBalance) {
-      principal = Math.round(currentBalance);
       await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
-      currentBalance = 0; continue;
+      currentBalance = Math.round(currentBalance - principal);
     }
-    principal = Math.round(principal);
-    await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
-    currentBalance = Math.round(currentBalance - principal);
-  }
-  alert('¡Plan recalculado correctamente!');
-  await fetchInstallments(selectedLoan.id);
-};
-    
-    const futureInstallments = loanInstallments.filter(i => i.installment_number > selectedInstallment.installment_number && i.status === 'PENDING');
-    if (futureInstallments.length === 0) return;
-
-    const previousPendingPrincipal = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
-    let newBalance = previousPendingPrincipal - excedenteCapital;
-    
-    if (newBalance <= 0) newBalance = 0;
-
-    const rate = Number(selectedLoan.nominal_rate_mv) / 100;
-    const remainingMonths = futureInstallments.length;
-    let currentBalance = newBalance;
-
-    const updates = [];
-
-    if (strategy === 'REDUCE_QUOTA') {
-      const newFixedQuota = newBalance <= 0 ? 0 : newBalance * (rate * Math.pow(1 + rate, remainingMonths)) / (Math.pow(1 + rate, remainingMonths) - 1);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        if (currentBalance <= 0.5) {
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        const interest = currentBalance * rate;
-        let principal = newFixedQuota - interest;
-
-        if (i === futureInstallments.length - 1 || currentBalance < principal) {
-          principal = currentBalance;
-        }
-        
-        updates.push({
-          id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    } else {
-      const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-      
-      for (let i = 0; i < futureInstallments.length; i++) {
-        const inst = futureInstallments[i];
-        
-        if (currentBalance <= 0.5) { 
-          updates.push({ id: inst.id, expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' });
-          continue;
-        }
-
-        const interest = currentBalance * rate;
-        let principal = fixedQuota - interest;
-        
-        if (currentBalance < principal) principal = currentBalance;
-
-        updates.push({
-          id: inst.id,
-          expected_amount: Math.round(principal + interest),
-          principal_portion: Math.round(principal),
-          interest_portion: Math.round(interest),
-          status: 'PENDING'
-        });
-        currentBalance -= principal;
-      }
-    }
-
-    for (const update of updates) {
-      await supabase.from('loan_installments').update({
-        expected_amount: update.expected_amount,
-        principal_portion: update.principal_portion,
-        interest_portion: update.interest_portion,
-        status: update.status
-      }).eq('id', update.id);
-    }
+    alert('¡Plan recalculado correctamente!');
+    await fetchInstallments(selectedLoan.id);
   };
 
   const handleRegisterPayment = async () => {
@@ -334,6 +256,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       
       const cobroObligatorio = cuotaBase + moraCobrada;
       const abonoCapitalExtra = pagoReal - cobroObligatorio;
+
+      console.log(`PAGO REAL: ${pagoReal} | OBLIGATORIO: ${cobroObligatorio} | ABONO: ${abonoCapitalExtra}`);
 
       const nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + (abonoCapitalExtra > 0 ? abonoCapitalExtra : 0);
 
@@ -359,6 +283,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       await fetchInstallments(selectedLoan.id); 
       
     } catch (err: any) {
+      console.error("Error en pago:", err);
       alert('Error al registrar pago: ' + err.message);
     }
   };
@@ -379,39 +304,29 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
-    let csvContent = "data:text/csv;charset=utf-8,No. Cuota,Fecha Esperada,Saldo Inicial,Costos Asociados,Capital,Interes,Mora Cobrada,Vr. Cuota,Saldo Final,Estado,Fecha Real Pago,Monto Real Pagado\n";
+    let csvContent = "data:text/csv;charset=utf-8,Cuota,Fecha Pago,Saldo Inicio,Costos asociados,Capital,Interes,Mora,Vr. Cuota,Saldo Final\n";
     
     let tempBalanceForExcel = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     
-    loanInstallments.forEach((row, index) => {
-      if (row.status !== 'PAID_EARLY') {
-        const saldoInicio = tempBalanceForExcel;
-        const capitalRestar = Number(row.principal_portion);
-        let saldoFinal = saldoInicio - capitalRestar;
-        if (saldoFinal < 0) saldoFinal = 0;
-        
-        tempBalanceForExcel = saldoFinal;
+    loanInstallments.filter(inst => inst.status !== 'PAID_EARLY').forEach((row, index) => {
+      const saldoInicio = tempBalanceForExcel;
+      const capitalRestar = Number(row.principal_portion);
+      let saldoFinal = saldoInicio - capitalRestar;
+      if (saldoFinal < 0) saldoFinal = 0;
+      tempBalanceForExcel = saldoFinal;
 
-        const costosAsociados = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
-        const valorCuotaTotal = Number(row.expected_amount) + costosAsociados;
+      const costosAsoc = index === 0 ? Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) : 0;
+      const vrCuota = Number(row.expected_amount) + costosAsoc;
+      const mora = row.late_fee_charged > 0 ? row.late_fee_charged : 0;
 
-        const rowData = [
-          row.installment_number, 
-          row.expected_payment_date, 
-          saldoInicio,
-          costosAsociados,
-          row.principal_portion,
-          row.interest_portion, 
-          row.late_fee_charged,
-          valorCuotaTotal,
-          saldoFinal,
-          row.status, 
-          row.actual_payment_date || 'N/A', 
-          row.actual_amount_paid
-        ];
-        csvContent += rowData.join(",") + "\n";
-      }
+      const rowData = [
+        row.installment_number, 
+        row.actual_payment_date || row.expected_payment_date, 
+        saldoInicio, costosAsoc, row.principal_portion, row.interest_portion, mora, vrCuota, saldoFinal
+      ];
+      csvContent += rowData.join(",") + "\n";
     });
+    
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -419,6 +334,11 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const updateStatus = async (appId: string, newStatus: string) => {
+    const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
+    if (!error) { fetchApplications(); setSelectedApp(null); }
   };
 
   const formatCurrency = (val: any) => {
@@ -475,6 +395,8 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           <div className="max-w-3xl mx-auto">
             <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 mb-6">
               <h2 className="text-xl font-bold text-white mb-2">Tasas de Mora Diaria (Usura)</h2>
+              <p className="text-slate-400 text-sm mb-6">El sistema usa esta tabla para calcular la penalidad exacta por cada día de retraso.</p>
+              
               <form onSubmit={handleAddUsuryRate} className="flex items-end gap-4 bg-slate-900/50 p-4 rounded-xl border border-slate-700/30 mb-8">
                 <div className="flex-1">
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Mes</label>
@@ -616,7 +538,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       <Calculator size={14}/> Recalcular Plan
     </button>
     <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-slate-300 hover:text-white hover:border-emerald-500 text-sm transition-colors">
-      <Download size={14}/> Exportar Excel
+      <Download size={14} /> Exportar Excel
     </button>
   </div>
 </div>
