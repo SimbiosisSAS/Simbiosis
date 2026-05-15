@@ -1111,7 +1111,7 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
           <span className="text-slate-200 font-mono">{formatCurrency(pazYSalvoData.saldoActual)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-slate-400">Último pago:</span>
+          <span className="text-slate-400">{pazYSalvoData.tienePagos ? 'Último pago:' : 'Fecha desembolso:'}</span>
           <span className="text-slate-300">{pazYSalvoData.ultimaFecha}</span>
         </div>
         <div className="flex justify-between text-sm">
