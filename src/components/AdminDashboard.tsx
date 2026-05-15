@@ -207,7 +207,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     }
   };
 
-  const repairFullSchedule = async () => {
+const repairFullSchedule = async () => {
   if (!selectedLoan || loanInstallments.length === 0) return;
   if (!window.confirm(`¿Recalcular todas las cuotas PENDIENTES de ${selectedLoan.client_name} desde el saldo actual?`)) return;
 
@@ -223,19 +223,27 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const fixedQuota = Number(selectedLoan.fixed_quota_amount);
   if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
 
-  const pending = loanInstallments
-    .filter(i => i.status === 'PENDING')
-    .sort((a, b) => a.installment_number - b.installment_number);
-
-  if (pending.length === 0) { alert('No hay cuotas pendientes.'); return; }
-
+  // Calcular saldo real actual
   const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
   const capitalPagado = loanInstallments
     .filter(i => i.status === 'PAID' || i.status === 'LATE')
     .reduce((s, i) => s + Number(i.principal_portion), 0);
   let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
 
-  // ── PASO 1: Actualizar cuotas pendientes existentes ─────────────────────
+  if (currentBalance <= 0.5) { alert('El crédito ya está completamente saldado.'); return; }
+
+  // Cuotas pendientes a actualizar
+  const pending = loanInstallments
+    .filter(i => i.status === 'PENDING')
+    .sort((a, b) => a.installment_number - b.installment_number);
+
+  // Punto de partida para nuevas cuotas: última cuota existente (pagada o pendiente)
+  const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
+  const ultimaCuota = todasOrdenadas[0];
+  let nextInstNumber = ultimaCuota.installment_number + 1;
+  let lastDate = new Date(ultimaCuota.expected_payment_date);
+
+  // ── PASO 1: Actualizar cuotas pendientes existentes ──────────────────────
   for (let i = 0; i < pending.length; i++) {
     const inst = pending[i];
 
@@ -249,28 +257,6 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const interest = Math.round(currentBalance * rate);
     let principal = fixedQuota - interest;
 
-    // Última cuota existente: saldar lo que queda aunque sea más que la cuota normal
-    if (i === pending.length - 1) {
-      if (principal >= currentBalance) {
-        principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').update({
-          expected_amount: principal + interest, principal_portion: principal,
-          interest_portion: interest, status: 'PENDING'
-        }).eq('id', inst.id);
-        currentBalance = 0;
-      } else {
-        // Hay más saldo del que cabe — actualizar esta cuota normalmente
-        // y el saldo restante se cubrirá con cuotas nuevas abajo
-        principal = Math.round(principal);
-        await supabase.from('loan_installments').update({
-          expected_amount: principal + interest, principal_portion: principal,
-          interest_portion: interest, status: 'PENDING'
-        }).eq('id', inst.id);
-        currentBalance = Math.round(currentBalance - principal);
-      }
-      continue;
-    }
-
     if (principal >= currentBalance) {
       principal = Math.round(currentBalance);
       await supabase.from('loan_installments').update({
@@ -278,6 +264,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         interest_portion: interest, status: 'PENDING'
       }).eq('id', inst.id);
       currentBalance = 0;
+      // Actualizar punto de partida por si quedan más pendientes
+      lastDate = new Date(inst.expected_payment_date);
+      nextInstNumber = inst.installment_number + 1;
       continue;
     }
 
@@ -287,41 +276,20 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
       interest_portion: interest, status: 'PENDING'
     }).eq('id', inst.id);
     currentBalance = Math.round(currentBalance - principal);
+    lastDate = new Date(inst.expected_payment_date);
+    nextInstNumber = inst.installment_number + 1;
   }
 
-  // ── PASO 2: Si queda saldo, crear cuotas nuevas hasta liquidar ──────────
-  if (currentBalance > 0.5) {
-    const lastInst = pending[pending.length - 1];
-    let nextInstNumber = lastInst.installment_number + 1;
-    let lastDate = new Date(lastInst.expected_payment_date);
+  // ── PASO 2: Crear cuotas nuevas hasta liquidar el saldo ──────────────────
+  while (currentBalance > 0.5) {
+    lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
+    const nextDateStr = lastDate.toISOString().split('T')[0];
 
-    while (currentBalance > 0.5) {
-      // Avanzar un mes
-      lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
-      const nextDateStr = lastDate.toISOString().split('T')[0];
+    const interest = Math.round(currentBalance * rate);
+    let principal = fixedQuota - interest;
 
-      const interest = Math.round(currentBalance * rate);
-      let principal = fixedQuota - interest;
-
-      if (principal >= currentBalance) {
-        // Última cuota — saldo completo
-        principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').insert({
-          loan_id: selectedLoan.id,
-          installment_number: nextInstNumber,
-          expected_payment_date: nextDateStr,
-          expected_amount: principal + interest,
-          principal_portion: principal,
-          interest_portion: interest,
-          status: 'PENDING',
-          actual_amount_paid: 0,
-          late_fee_charged: 0,
-        });
-        currentBalance = 0;
-        break;
-      }
-
-      principal = Math.round(principal);
+    if (principal >= currentBalance) {
+      principal = Math.round(currentBalance);
       await supabase.from('loan_installments').insert({
         loan_id: selectedLoan.id,
         installment_number: nextInstNumber,
@@ -333,10 +301,25 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
         actual_amount_paid: 0,
         late_fee_charged: 0,
       });
-
-      currentBalance = Math.round(currentBalance - principal);
-      nextInstNumber++;
+      currentBalance = 0;
+      break;
     }
+
+    principal = Math.round(principal);
+    await supabase.from('loan_installments').insert({
+      loan_id: selectedLoan.id,
+      installment_number: nextInstNumber,
+      expected_payment_date: nextDateStr,
+      expected_amount: principal + interest,
+      principal_portion: principal,
+      interest_portion: interest,
+      status: 'PENDING',
+      actual_amount_paid: 0,
+      late_fee_charged: 0,
+    });
+
+    currentBalance = Math.round(currentBalance - principal);
+    nextInstNumber++;
   }
 
   alert('¡Plan recalculado correctamente!');
