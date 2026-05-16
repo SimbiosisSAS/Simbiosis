@@ -53,16 +53,19 @@ function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+  const checkAdminAccess = async () => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('admin') === 'true') {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    setCurrentStep('admin');
-  } else {
-    setCurrentStep('admin-login');
-  }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setCurrentStep('admin');
+      } else {
+        setCurrentStep('admin-login');
+      }
     }
-  }, []);
+  };
+  checkAdminAccess();
+}, []);
 useEffect(() => {
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') {
