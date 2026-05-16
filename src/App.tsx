@@ -63,7 +63,14 @@ function App() {
   }
     }
   }, []);
-
+useEffect(() => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      setCurrentStep('home');
+    }
+  });
+  return () => subscription.unsubscribe();
+}, []);
   const handleStartApplication = () => {
     setCurrentStep('credit-type');
     setError(null);
