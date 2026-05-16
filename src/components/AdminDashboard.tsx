@@ -619,5 +619,173 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
             </div>
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-3">
-                {applications.length===0?<div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text
+                {applications.length===0?<div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text -slate-400">No hay solicitudes</div>:(
+                  applications.map(app=>(
+                    <div key={app.id} onClick={()=>setSelectedApp(app)} className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all ${selectedApp?.id===app.id?'border-emerald-500/50':'border-slate-700/50 hover:bg-slate-800/60'}`}>
+                      <div className="flex items-start justify-between">
+                        <div><h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3><p className="text-xs text-slate-500">{app.email}</p><p className="text-lg font-bold text-emerald-400 mt-2 font-mono">${Number(app.credit_amount).toLocaleString('es-CO')}</p></div>
+                        <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div>
+                {selectedApp?(
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
+                    <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
+                    <div className="space-y-4 mb-6">
+                      <p className="text-slate-300"><strong>Nombre:</strong> {selectedApp.first_name} {selectedApp.last_name}</p>
+                      <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
+                      <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
+                    </div>
+                    {selectedApp.id_front_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl"/></div>}
+                    {selectedApp.id_back_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl"/></div>}
+                    {selectedApp.selfie_image&&<div className="mb-6"><p className="text-xs text-slate-500 mb-1">Selfie</p><img src={selectedApp.selfie_image} className="w-full rounded-xl"/></div>}
+                    {selectedApp.status==='PENDING'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>updateStatus(selectedApp.id,'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button><button onClick={()=>updateStatus(selectedApp.id,'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button></div>}
+                    {selectedApp.status==='REJECTED'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/>Eliminar Permanentemente</button></div>}
+                    {selectedApp.status==='APPROVED'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/>Eliminar Solicitud</button></div>}
+                  </div>
+                ):<div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* MODAL REVERSIÓN */}
+      {showReversalModal&&installmentToRevert&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><XCircle className="text-red-500"/>Reversar Pago</h2>
+            <p className="text-slate-400 text-sm mb-6">Esta acción anula el pago y devuelve la cuota a estado pendiente.</p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2 mb-6">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota:</span><span className="text-slate-200">#{installmentToRevert.installment_number}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Fecha pagada:</span><span className="text-slate-200">{installmentToRevert.actual_payment_date}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Monto registrado:</span><span className="text-red-400 font-mono font-bold">{formatCurrency(installmentToRevert.actual_amount_paid)}</span></div>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-amber-400">El plan de pagos se recalculará automáticamente.</p></div>
+            <div className="flex gap-3">
+              <button onClick={()=>{setShowReversalModal(false);setInstallmentToRevert(null);}} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleReversarPago} className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors font-bold">Confirmar Reversión</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REESTRUCTURACIÓN */}
+      {showRestructuringModal&&selectedLoan&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Settings className="text-amber-500"/>Reestructuración de Deuda</h2>
+            <p className="text-slate-400 text-sm mb-6">Modifica las condiciones del crédito de <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Saldo actual:</span><span className="text-white font-mono font-bold">{formatCurrency(calculateCurrentBalance())}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Tasa actual:</span><span className="text-slate-300">{selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??'--'}% MV</span></div>
+            </div>
+            <div className="space-y-4 mb-4">
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nueva Tasa MV (%)</label><input type="number" step="0.01" min="0" value={restructuringParams.nuevaTasa||''} onChange={e=>setRestructuringParams(p=>({...p,nuevaTasa:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500" placeholder="Ej: 0.8"/></div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label><input type="number" min="1" value={restructuringParams.nuevosPlazo||''} onChange={e=>setRestructuringParams(p=>({...p,nuevosPlazo:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500" placeholder="Ej: 12"/></div>
+              <label className="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded-xl cursor-pointer hover:border-amber-500/50 transition-colors">
+                <input type="checkbox" checked={restructuringParams.capitalizarMora} onChange={e=>setRestructuringParams(p=>({...p,capitalizarMora:e.target.checked}))} className="h-4 w-4 text-amber-500"/>
+                <div><p className="text-sm text-slate-200 font-medium">Capitalizar mora acumulada</p><p className="text-xs text-slate-500">Suma la mora al capital — el cliente no paga mora hoy pero aumenta su deuda</p></div>
+              </label>
+            </div>
+            {restructuringParams.nuevaTasa>0&&restructuringParams.nuevosPlazo>0&&(
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 mb-4">
+                <p className="text-xs text-slate-400 mb-1">Nueva cuota estimada:</p>
+                <p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(Math.round((calculateCurrentBalance())*(restructuringParams.nuevaTasa/100*Math.pow(1+restructuringParams.nuevaTasa/100,restructuringParams.nuevosPlazo))/(Math.pow(1+restructuringParams.nuevaTasa/100,restructuringParams.nuevosPlazo)-1)))}</p>
+                <p className="text-xs text-slate-500 mt-1">por {restructuringParams.nuevosPlazo} meses</p>
+              </div>
+            )}
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-red-400">Las cuotas pendientes actuales serán canceladas y se creará un nuevo plan.</p></div>
+            <div className="flex gap-3">
+              <button onClick={()=>setShowRestructuringModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleAplicarReestructuracion} className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl transition-colors font-bold">Aplicar Reestructuración</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PAZ Y SALVO */}
+      {showPazYSalvoModal&&pazYSalvoData&&selectedLoan&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><DollarSign className="text-emerald-500"/>Liquidación Anticipada</h2>
+            <p className="text-slate-400 text-sm mb-6">Paz y Salvo para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-3 mb-6">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Saldo Capital:</span><span className="text-slate-200 font-mono">{formatCurrency(pazYSalvoData.saldoActual)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">{pazYSalvoData.tienePagos?'Último pago:':'Fecha desembolso:'}</span><span className="text-slate-300">{pazYSalvoData.ultimaFecha}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Días transcurridos:</span><span className="text-amber-400 font-bold">{pazYSalvoData.diasTranscurridos} días</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Interés corrido:</span><span className="text-amber-400 font-mono">+ {formatCurrency(pazYSalvoData.interesCorrido)}</span></div>
+              {pazYSalvoData.morasPendientes>0&&<div className="flex justify-between text-sm"><span className="text-slate-400">Moras pendientes:</span><span className="text-red-400 font-mono">+ {formatCurrency(pazYSalvoData.morasPendientes)}</span></div>}
+              <div className="border-t border-slate-700 pt-3 flex justify-between"><span className="text-white font-bold text-base">Total a Pagar Hoy:</span><span className="text-emerald-400 font-mono font-bold text-lg">{formatCurrency(pazYSalvoData.totalAPagar)}</span></div>
+              <p className="text-xs text-slate-500 text-right">Calculado al {pazYSalvoData.fechaCalculo}</p>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-amber-400">Este valor es válido únicamente para el día de hoy.</p></div>
+            <div className="flex gap-3">
+              <button onClick={()=>setShowPazYSalvoModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cerrar</button>
+              <button onClick={()=>{generarEstadoCuenta();setShowPazYSalvoModal(false);}} className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors font-bold">Ver Estado de Cuenta</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NOTIFICACIÓN */}
+      {showNotificationModal&&notificationInstallment&&selectedLoan&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Phone className="text-blue-400"/>Enviar Notificación WhatsApp</h2>
+            <p className="text-slate-400 text-sm mb-6">Recordatorio de pago para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2 mb-4">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota:</span><span className="text-slate-200">#{notificationInstallment.installment_number}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Monto:</span><span className="text-emerald-400 font-mono font-bold">{formatCurrency(notificationInstallment.expected_amount)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Vence:</span><span className="text-slate-200">{new Date(notificationInstallment.expected_payment_date).toLocaleDateString('es-CO')}</span></div>
+            </div>
+            <div className="mb-6"><label className="block text-xs font-semibold text-slate-400 uppercase mb-2">WhatsApp del cliente</label><input type="tel" value={notificationPhone} onChange={e=>setNotificationPhone(e.target.value)} placeholder="+573001234567" className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 font-mono"/><p className="text-xs text-slate-500 mt-1">Ejemplo Colombia: +573001234567</p></div>
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-blue-400">El cliente debe haber enviado previamente un mensaje al número de Twilio Sandbox.</p></div>
+            <div className="flex gap-3">
+              <button onClick={()=>{setShowNotificationModal(false);setNotificationPhone('');setNotificationInstallment(null);}} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleEnviarNotificacion} disabled={!notificationPhone||sendingNotification} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">{sendingNotification?'Enviando...':'Enviar WhatsApp'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE PAGO */}
+      {showPaymentModal&&selectedInstallment&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2 pb-4 border-b border-slate-800"><DollarSign className="text-emerald-500"/>Registro de Recaudo - Cuota {selectedInstallment.installment_number}</h2>
+            <div className="space-y-5">
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">1. Fecha Real de Pago</label><div className="relative"><Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500"/><input type="date" value={paymentData.actualDate} onChange={e=>handleDateChangeInModal(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-3 py-2 text-white focus:border-emerald-500 outline-none"/></div></div>
+              <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2">
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota Base:</span><span className="text-slate-200 font-mono">{formatCurrency(selectedInstallment.expected_amount)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Días de Atraso:</span><span className={paymentData.daysLate>0?'text-red-400 font-bold':'text-emerald-400'}>{paymentData.daysLate} días</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Mora Calculada:</span><span className={paymentData.lateFee>0?'text-red-400 font-mono':'text-slate-400 font-mono'}>+ {formatCurrency(paymentData.lateFee)}</span></div>
+                <div className="border-t border-slate-800 pt-2 flex justify-between"><span className="text-slate-300 font-bold">Mínimo a Pagar:</span><span className="text-emerald-500 font-mono font-bold">{formatCurrency(Number(selectedInstallment.expected_amount)+paymentData.lateFee)}</span></div>
+              </div>
+              <div><label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">2. Monto Real Recibido</label>
+                <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500"/><input type="number" value={paymentData.actualAmount||''} onChange={e=>setPaymentData({...paymentData,actualAmount:Number(e.target.value)})} className="w-full bg-slate-800 border border-emerald-500/50 rounded-xl pl-10 pr-3 py-3 text-white font-mono text-lg focus:border-emerald-400 outline-none" placeholder="Ej: 600000"/></div>
+                {paymentData.actualAmount>(Number(selectedInstallment.expected_amount)+paymentData.lateFee)&&(
+                  <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                    <p className="text-xs text-emerald-400 mb-3 font-semibold flex items-center gap-1"><Sparkles size={14}/>Abono extra de {formatCurrency(paymentData.actualAmount-(Number(selectedInstallment.expected_amount)+paymentData.lateFee))}. ¿Cómo aplicar?</p>
+                    <div className="flex flex-col gap-3">
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_TIME" checked={paymentData.extraPaymentType==='REDUCE_TIME'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"/>Reducir Plazo</label>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_QUOTA" checked={paymentData.extraPaymentType==='REDUCE_QUOTA'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"/>Reducir Cuota</label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-8">
+              <button onClick={()=>setShowPaymentModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleRegisterPayment} className="flex-[2] px-4 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-400 hover:to-emerald-500 transition-all font-bold shadow-lg shadow-emerald-500/20">Aplicar Recaudo</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
     
