@@ -179,7 +179,11 @@ function App() {
       )}
       
       {currentStep === 'admin' && (
-        <AdminDashboard onLogout={() => setCurrentStep('home')} />
+        <AdminDashboard onLogout={async () => {
+  await supabase.auth.signOut();
+  setCurrentStep('home');
+  window.history.replaceState({}, '', window.location.pathname);
+}} />
       )}
     </div>
   );
