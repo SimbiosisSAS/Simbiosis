@@ -9,13 +9,11 @@ interface AdminLoginProps {
 export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
 
-  // Paso 1: Credenciales
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Paso 2: OTP
   const [otpInput, setOtpInput] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [otpExpiry, setOtpExpiry] = useState<number>(0);
@@ -40,7 +38,6 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      // Generar código OTP de 6 dígitos
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       setGeneratedOtp(code);
       setOtpExpiry(Date.now() + 15 * 60 * 1000);
@@ -98,7 +95,6 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
     <div className="min-h-[80vh] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-100">
 
-        {/* PASO 1: CREDENCIALES */}
         {step === 'credentials' && (
           <>
             <div className="text-center mb-8">
@@ -157,7 +153,6 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
           </>
         )}
 
-        {/* PASO 2: CÓDIGO OTP */}
         {step === 'otp' && (
           <>
             <div className="text-center mb-8">
@@ -213,7 +208,12 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 {resending ? 'Reenviando...' : 'Reenviar código'}
               </button>
               <button
-                onClick={() => { setStep('credentials'); setOtpInput(''); setOtpError(null); supabase.auth.signOut(); }}
+                onClick={() => {
+                  setStep('credentials');
+                  setOtpInput('');
+                  setOtpError(null);
+                  supabase.auth.signOut();
+                }}
                 className="text-sm text-slate-400 hover:text-slate-600"
               >
                 Volver al inicio
@@ -221,6 +221,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             </div>
           </>
         )}
+
       </div>
     </div>
   );
