@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp } from 'lucide-react'; // ← se agrega TrendingUp al final
+import { CheckCircle, XCircle, Clock, Eye, Sparkles, Filter, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp, Phone } from 'lucide-react'; // ← se agrega TrendingUp al final
 import LoanOriginationEngine from './LoanOriginationEngine';
 import IndicadoresCartera from './IndicadoresCartera'; // ← línea nueva
 
