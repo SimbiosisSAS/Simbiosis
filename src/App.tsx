@@ -55,8 +55,12 @@ function App() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('admin') === 'true') {
-      // Bloqueo de seguridad: Redirigir al Login en lugar del Panel Directo
-      setCurrentStep('admin-login');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    setCurrentStep('admin');
+  } else {
+    setCurrentStep('admin-login');
+  }
     }
   }, []);
 
