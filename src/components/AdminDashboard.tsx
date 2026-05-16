@@ -41,6 +41,16 @@ const [restructuringParams, setRestructuringParams] = useState({
   nuevosPlazo: 0,
   capitalizarMora: false,
 });
+  const [showRestructuringModal, setShowRestructuringModal] = useState(false);
+const [restructuringParams, setRestructuringParams] = useState({
+  nuevaTasa: 0,
+  nuevosPlazo: 0,
+  capitalizarMora: false,
+});
+const [showNotificationModal, setShowNotificationModal] = useState(false);
+const [notificationPhone, setNotificationPhone] = useState('');
+const [notificationInstallment, setNotificationInstallment] = useState<any | null>(null);
+const [sendingNotification, setSendingNotification] = useState(false);
 const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
 const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
 
