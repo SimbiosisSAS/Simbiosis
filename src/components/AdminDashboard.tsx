@@ -1394,6 +1394,16 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
                         </button>
                       </div>
                     )}
+                    {selectedApp.status === 'APPROVED' && (
+  <div className="space-y-3 pt-6 border-t border-slate-700/50">
+    <button
+      onClick={() => handleDeleteApplication(selectedApp.id)}
+      className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"
+    >
+      <Trash2 size={16} /> Eliminar Solicitud
+    </button>
+  </div>
+)}
                   </div>
                 ) : (
                   <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
