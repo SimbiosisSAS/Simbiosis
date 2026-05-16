@@ -38,17 +38,13 @@ function calculateTIR(principal: number, originationCosts: number, monthlyPaymen
 
   const npv = (rate: number): number => {
     let sum = -netDisbursement;
-    for (let t = 1; t <= termMonths; t++) {
-      sum += monthlyPayment / Math.pow(1 + rate, t);
-    }
+    for (let t = 1; t <= termMonths; t++) sum += monthlyPayment / Math.pow(1 + rate, t);
     return sum;
   };
 
   const dnpv = (rate: number): number => {
     let sum = 0;
-    for (let t = 1; t <= termMonths; t++) {
-      sum -= (t * monthlyPayment) / Math.pow(1 + rate, t + 1);
-    }
+    for (let t = 1; t <= termMonths; t++) sum -= (t * monthlyPayment) / Math.pow(1 + rate, t + 1);
     return sum;
   };
 
@@ -60,37 +56,23 @@ function calculateTIR(principal: number, originationCosts: number, monthlyPaymen
     const df = dnpv(rate);
     if (Math.abs(df) < 1e-15) break;
     const newRate = rate - f / df;
-    if (Math.abs(newRate - rate) < 1e-10) {
-      rate = newRate;
-      break;
-    }
+    if (Math.abs(newRate - rate) < 1e-10) { rate = newRate; break; }
     rate = newRate;
     if (rate < -0.99) rate = 0.001;
     if (rate > 10) rate = 5;
   }
-
   return rate * 100;
 }
 
 function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; monthlyPayment: number; totalPayment: number; tir: number } | null {
   const { principalAmount, originationCosts, disbursementDate, nominalRateMV, termMonths } = params;
-
-  if (principalAmount <= 0 || nominalRateMV <= 0 || termMonths <= 0 || !disbursementDate) {
-    return null;
-  }
+  if (principalAmount <= 0 || nominalRateMV <= 0 || termMonths <= 0 || !disbursementDate) return null;
 
   const r = nominalRateMV / 100;
   const n = termMonths;
-  
-  // EL CAMBIO CLAVE: El monto a financiar (sobre el que se calcula todo) INCLUYE los costos.
   const amountToFinance = principalAmount + originationCosts;
-
-  // Calculamos la cuota fija mensual sobre el TOTAL financiado
   const fixedPayment = amountToFinance * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-
   const rows: AmortizationRow[] = [];
-  
-  // El balance arranca en el monto total financiado
   let balance = amountToFinance;
   const startDate = new Date(disbursementDate + 'T00:00:00');
 
@@ -100,15 +82,11 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
     const interestPortion = balance * r;
     let principalPortion = fixedPayment - interestPortion;
-    
-    // Los costos solo se muestran visualmente en la cuota 1, pero ya están financiados en el saldo
     const costs = i === 1 ? originationCosts : 0;
 
-    if (i === n) {
-      principalPortion = balance; // Ajuste final por decimales
-    }
+    if (i === n) principalPortion = balance;
 
-    const totalPaymentForPeriod = fixedPayment; // La cuota ya es igual todos los meses
+    const totalPaymentForPeriod = fixedPayment;
     const closingBalance = i === n ? 0 : Math.max(0, balance - principalPortion);
 
     rows.push({
@@ -121,21 +99,13 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
       paymentAmount: Math.round(totalPaymentForPeriod),
       closingBalance: Math.round(closingBalance),
     });
-
     balance = closingBalance;
   }
 
   const totalPayment = rows.reduce((sum, row) => sum + row.paymentAmount, 0);
-  
-  // La TIR se calcula sobre lo que realmente le entregaste al cliente (principalAmount)
   const tir = calculateTIR(principalAmount, originationCosts, fixedPayment, termMonths);
 
-  return {
-    rows,
-    monthlyPayment: Math.round(fixedPayment),
-    totalPayment,
-    tir,
-  };
+  return { rows, monthlyPayment: Math.round(fixedPayment), totalPayment, tir };
 }
 
 export default function LoanOriginationEngine({ prefillData }: { prefillData?: any }) {
@@ -155,18 +125,9 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   const [activating, setActivating] = useState(false);
   const [activateSuccess, setActivateSuccess] = useState(false);
 
+  // Autonumeración
   useEffect(() => {
     const fetchNextLoanNumber = async () => {
-      useEffect(() => {
-  if (prefillData && prefillData.id_number) {
-    setParams(p => ({
-      ...p,
-      clientName: `${prefillData.first_name} ${prefillData.last_name}`,
-      clientId: prefillData.id_number,
-      principalAmount: Number(prefillData.credit_amount) || 0
-    }));
-  }
-}, [prefillData]);
       try {
         const { data, error } = await supabase
           .from('active_loans')
@@ -179,10 +140,8 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
           const numbers = data
             .map(row => parseInt(row.loan_number.replace(/\D/g, ''), 10))
             .filter(n => !isNaN(n));
-          
           if (numbers.length > 0) {
-            const maxNumber = Math.max(...numbers);
-            setParams(p => ({ ...p, loanNumber: (maxNumber + 1).toString() }));
+            setParams(p => ({ ...p, loanNumber: (Math.max(...numbers) + 1).toString() }));
             return;
           }
         }
@@ -191,9 +150,20 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         console.error('Error buscando número de crédito:', err);
       }
     };
-
     fetchNextLoanNumber();
   }, []);
+
+  // Pre-llenado con datos del cliente aprobado
+  useEffect(() => {
+    if (prefillData && prefillData.id_number) {
+      setParams(p => ({
+        ...p,
+        clientName: `${prefillData.first_name} ${prefillData.last_name}`,
+        clientId: prefillData.id_number,
+        principalAmount: Number(prefillData.credit_amount) || 0
+      }));
+    }
+  }, [prefillData]);
 
   const result = useMemo(() => {
     if (!isCalculated) return null;
@@ -216,7 +186,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     setShowFullTable(false);
     setActivateSuccess(false);
     setParams({
-      loanNumber: params.loanNumber, 
+      loanNumber: params.loanNumber,
       clientName: '',
       clientId: '',
       principalAmount: 0,
@@ -230,20 +200,18 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   const handleActivate = async () => {
     if (!result) return;
     setActivating(true);
-    
     try {
-      // 1. Guardar el crédito maestro con los nombres de columnas de Supabase exactamente alineados
       const { data: loanData, error: loanError } = await supabase
         .from('active_loans')
         .insert({
           loan_number: params.loanNumber || null,
           client_name: params.clientName,
           client_id_number: params.clientId,
-          loan_amount: params.principalAmount,            // CORREGIDO PARA BD
-          associated_costs: params.originationCosts,      // CORREGIDO PARA BD
+          loan_amount: params.principalAmount,
+          associated_costs: params.originationCosts,
           disbursement_date: params.disbursementDate,
-          interest_rate_monthly: params.nominalRateMV,    // CORREGIDO PARA BD
-          installments: params.termMonths,                // CORREGIDO PARA BD
+          interest_rate_monthly: params.nominalRateMV,
+          installments: params.termMonths,
           fixed_quota_amount: result.monthlyPayment,
           total_payment: result.totalPayment,
           tir: result.tir,
@@ -253,15 +221,13 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         .single();
 
       if (loanError) {
-        console.error("Detalle del error Supabase:", loanError);
-        throw new Error(loanError.message);
+        console.error('Detalle del error Supabase:', loanError);
+        throw loanError;
       }
 
-      // 2. Guardar las cuotas individuales
       const installmentsToInsert = result.rows.map(row => {
         const paymentDate = new Date(params.disbursementDate);
         paymentDate.setMonth(paymentDate.getMonth() + row.installmentNumber);
-        
         return {
           loan_id: loanData.id,
           installment_number: row.installmentNumber,
@@ -269,7 +235,9 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
           expected_amount: row.paymentAmount,
           principal_portion: row.principal,
           interest_portion: row.interest,
-          status: 'PENDING'
+          status: 'PENDING',
+          actual_amount_paid: 0,
+          late_fee_charged: 0,
         };
       });
 
@@ -280,13 +248,11 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
       if (installmentsError) throw installmentsError;
 
       setActivateSuccess(true);
-      alert('¡Crédito activado y plan de pagos guardado exitosamente!');
-      
+      alert('¡Crédito activado y guardado en la cartera exitosamente!');
+
       const currentNum = parseInt(params.loanNumber.replace(/\D/g, ''), 10);
-      if (!isNaN(currentNum)) {
-        setParams(p => ({ ...p, loanNumber: (currentNum + 1).toString() }));
-      }
-      
+      if (!isNaN(currentNum)) setParams(p => ({ ...p, loanNumber: (currentNum + 1).toString() }));
+
     } catch (err: any) {
       console.error('Error activando el crédito:', err);
       alert('Hubo un error al guardar: ' + err.message);
@@ -306,9 +272,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
 
   return (
     <div className="space-y-6">
-      {/* Split Screen: Input + Projection */}
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Left Panel - Input Parameters */}
         <div className="lg:col-span-2">
           <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-6">
@@ -323,135 +287,44 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
 
             <div className="space-y-4">
               <div>
-                <label className={labelClass}>
-                  <FileDigit className="w-3 h-3 inline mr-1" />
-                  Número de Crédito
-                </label>
-                <input
-                  type="text"
-                  value={params.loanNumber}
-                  onChange={(e) => setParams(p => ({ ...p, loanNumber: e.target.value }))}
-                  className={`${inputClass} font-mono text-emerald-400`}
-                  placeholder="Ej: 52"
-                />
+                <label className={labelClass}><FileDigit className="w-3 h-3 inline mr-1" />Número de Crédito</label>
+                <input type="text" value={params.loanNumber} onChange={(e) => setParams(p => ({ ...p, loanNumber: e.target.value }))} className={`${inputClass} font-mono text-emerald-400`} placeholder="Ej: 52" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <User className="w-3 h-3 inline mr-1" />
-                  Cliente
-                </label>
-                <input
-                  type="text"
-                  value={params.clientName}
-                  onChange={(e) => setParams(p => ({ ...p, clientName: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Nombre del cliente"
-                />
+                <label className={labelClass}><User className="w-3 h-3 inline mr-1" />Cliente</label>
+                <input type="text" value={params.clientName} onChange={(e) => setParams(p => ({ ...p, clientName: e.target.value }))} className={inputClass} placeholder="Nombre del cliente" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <Hash className="w-3 h-3 inline mr-1" />
-                  Identificación
-                </label>
-                <input
-                  type="text"
-                  value={params.clientId}
-                  onChange={(e) => setParams(p => ({ ...p, clientId: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Cédula o NIT"
-                />
+                <label className={labelClass}><Hash className="w-3 h-3 inline mr-1" />Identificación</label>
+                <input type="text" value={params.clientId} onChange={(e) => setParams(p => ({ ...p, clientId: e.target.value }))} className={inputClass} placeholder="Cédula o NIT" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <DollarSign className="w-3 h-3 inline mr-1" />
-                  Monto Principal (COP)
-                </label>
-                <input
-                  type="number"
-                  value={params.principalAmount || ''}
-                  onChange={(e) => setParams(p => ({ ...p, principalAmount: Number(e.target.value) }))}
-                  className={inputClass}
-                  placeholder="15,000,000"
-                  min="0"
-                />
+                <label className={labelClass}><DollarSign className="w-3 h-3 inline mr-1" />Monto Principal (COP)</label>
+                <input type="number" value={params.principalAmount || ''} onChange={(e) => setParams(p => ({ ...p, principalAmount: Number(e.target.value) }))} className={inputClass} placeholder="15,000,000" min="0" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <DollarSign className="w-3 h-3 inline mr-1" />
-                  Costos de Originación (COP)
-                </label>
-                <input
-                  type="number"
-                  value={params.originationCosts || ''}
-                  onChange={(e) => setParams(p => ({ ...p, originationCosts: Number(e.target.value) }))}
-                  className={inputClass}
-                  placeholder="0"
-                  min="0"
-                />
+                <label className={labelClass}><DollarSign className="w-3 h-3 inline mr-1" />Costos de Originación (COP)</label>
+                <input type="number" value={params.originationCosts || ''} onChange={(e) => setParams(p => ({ ...p, originationCosts: Number(e.target.value) }))} className={inputClass} placeholder="0" min="0" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <Calendar className="w-3 h-3 inline mr-1" />
-                  Fecha de Desembolso
-                </label>
-                <input
-                  type="date"
-                  value={params.disbursementDate}
-                  onChange={(e) => setParams(p => ({ ...p, disbursementDate: e.target.value }))}
-                  className={inputClass}
-                />
+                <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha de Desembolso</label>
+                <input type="date" value={params.disbursementDate} onChange={(e) => setParams(p => ({ ...p, disbursementDate: e.target.value }))} className={inputClass} />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <Percent className="w-3 h-3 inline mr-1" />
-                  Tasa Nominal MV (%)
-                </label>
-                <input
-                  type="number"
-                  value={params.nominalRateMV || ''}
-                  onChange={(e) => setParams(p => ({ ...p, nominalRateMV: Number(e.target.value) }))}
-                  className={inputClass}
-                  placeholder="1.5"
-                  min="0"
-                  step="0.01"
-                />
+                <label className={labelClass}><Percent className="w-3 h-3 inline mr-1" />Tasa Nominal MV (%)</label>
+                <input type="number" value={params.nominalRateMV || ''} onChange={(e) => setParams(p => ({ ...p, nominalRateMV: Number(e.target.value) }))} className={inputClass} placeholder="1.5" min="0" step="0.01" />
               </div>
-
               <div>
-                <label className={labelClass}>
-                  <Calendar className="w-3 h-3 inline mr-1" />
-                  Plazo (Meses)
-                </label>
-                <input
-                  type="number"
-                  value={params.termMonths || ''}
-                  onChange={(e) => setParams(p => ({ ...p, termMonths: Number(e.target.value) }))}
-                  className={inputClass}
-                  placeholder="36"
-                  min="1"
-                />
+                <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Plazo (Meses)</label>
+                <input type="number" value={params.termMonths || ''} onChange={(e) => setParams(p => ({ ...p, termMonths: Number(e.target.value) }))} className={inputClass} placeholder="36" min="1" />
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  onClick={handleCalculate}
-                  disabled={!isValid}
-                  className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white py-3 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Calculator className="w-4 h-4" />
-                  Calcular Plan
+                <button onClick={handleCalculate} disabled={!isValid} className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white py-3 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  <Calculator className="w-4 h-4" />Calcular Plan
                 </button>
                 {isCalculated && (
-                  <button
-                    onClick={handleReset}
-                    className="px-4 py-3 rounded-xl text-sm font-medium border border-slate-600/50 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-all"
-                  >
+                  <button onClick={handleReset} className="px-4 py-3 rounded-xl text-sm font-medium border border-slate-600/50 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-all">
                     Limpiar
                   </button>
                 )}
@@ -460,7 +333,6 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
           </div>
         </div>
 
-        {/* Right Panel - Live Projection */}
         <div className="lg:col-span-3">
           <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 h-full">
             <div className="flex items-center gap-3 mb-6">
@@ -485,67 +357,33 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-5">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Total a Pagar</p>
-                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">
-                      {formatCurrency(result.totalPayment)}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">COP</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Total a Pagar</p>
+                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">{formatCurrency(result.totalPayment)}</p>
                   </div>
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-5">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">TIR Mensual</p>
-                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">
-                      {result.tir.toFixed(3)}%
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">Tasa Interna de Retorno</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-2">TIR Mensual</p>
+                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">{result.tir.toFixed(3)}%</p>
                   </div>
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-5">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Cuota Mensual</p>
-                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">
-                      {formatCurrency(result.monthlyPayment)}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">COP / mes</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Cuota Mensual</p>
+                    <p className="text-2xl font-bold text-emerald-400 font-mono tabular-nums">{formatCurrency(result.monthlyPayment)}</p>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Intereses Totales</p>
-                    <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">
-                      {formatCurrency(totalInterest)}
-                    </p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Intereses Totales</p>
+                    <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">{formatCurrency(totalInterest)}</p>
                   </div>
                   <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Costos Originación</p>
-                    <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">
-                      {formatCurrency(params.originationCosts)}
-                    </p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Costos Originación</p>
+                    <p className="text-lg font-bold text-slate-300 font-mono tabular-nums">{formatCurrency(params.originationCosts)}</p>
                   </div>
                 </div>
-
-                <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Cliente: <span className="text-slate-300 font-medium">{params.clientName}</span></span>
-                    <span className="text-slate-500">ID: <span className="text-slate-300 font-medium">{params.clientId}</span></span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs mt-2">
-                    <span className="text-slate-500">Tasa: <span className="text-emerald-400 font-medium">{params.nominalRateMV}% MV</span></span>
-                    <span className="text-slate-500">Plazo: <span className="text-slate-300 font-medium">{params.termMonths} meses</span></span>
-                  </div>
-                </div>
-
                 <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={handleExportPDF}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border border-slate-600/50 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-all"
-                  >
-                    <FileDown className="w-4 h-4" />
-                    Exportar Plan a PDF
+                  <button onClick={handleExportPDF} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium border border-slate-600/50 text-slate-400 hover:text-slate-200 transition-all">
+                    <FileDown className="w-4 h-4" />Exportar a PDF
                   </button>
-                  <button
-                    onClick={handleActivate}
-                    disabled={activating || activateSuccess}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                  <button onClick={handleActivate} disabled={activating || activateSuccess} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white transition-all disabled:opacity-50">
                     <Rocket className="w-4 h-4" />
                     {activating ? 'Activando...' : activateSuccess ? 'Crédito Activado' : 'Activar Crédito'}
                   </button>
@@ -556,13 +394,9 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         </div>
       </div>
 
-      {/* Amortization Table */}
       {result && (
-        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden mt-6">
-          <div
-            className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
-            onClick={() => setShowFullTable(!showFullTable)}
-          >
+        <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-700/20" onClick={() => setShowFullTable(!showFullTable)}>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-emerald-500/15 rounded-lg flex items-center justify-center">
                 <Calculator className="w-4 h-4 text-emerald-400" />
@@ -578,56 +412,41 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
           {(showFullTable ? result.rows : result.rows.slice(0, 5)).length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
-                  <tr className="border-t border-slate-700/50">
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-left">No. Cuota</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-left">Fecha Pago</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Costos Asociados</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Inicio</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Capital</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Interés</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Vr. Cuota</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Saldo Final</th>
+                <thead className="border-t border-slate-700/50">
+                  <tr className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase text-right">
+                    <th className="text-left p-3">No. Cuota</th>
+                    <th className="text-left p-3">Fecha Pago</th>
+                    <th className="p-3">Costos Asociados</th>
+                    <th className="p-3">Saldo Inicio</th>
+                    <th className="p-3">Capital</th>
+                    <th className="p-3">Interés</th>
+                    <th className="p-3">Vr. Cuota</th>
+                    <th className="p-3">Saldo Final</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-700/30">
                   {(showFullTable ? result.rows : result.rows.slice(0, 5)).map((row) => (
-                    <tr key={row.installmentNumber} className="border-t border-slate-700/30 hover:bg-slate-700/20 transition-colors">
-                      <td className="px-4 py-3 text-sm text-slate-300 font-mono tabular-nums">{row.installmentNumber}</td>
-                      <td className="px-4 py-3 text-sm text-slate-400">{row.paymentDate}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 font-mono tabular-nums text-right">
-                        {row.associatedCosts > 0 ? formatCurrency(row.associatedCosts) : '--'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-300 font-mono tabular-nums text-right">{formatCurrency(row.openingBalance)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 font-mono tabular-nums text-right">{formatCurrency(row.principal)}</td>
-                      <td className="px-4 py-3 text-sm text-amber-400/80 font-mono tabular-nums text-right">{formatCurrency(row.interest)}</td>
-                      <td className="px-4 py-3 text-sm text-emerald-400 font-mono tabular-nums text-right font-semibold">{formatCurrency(row.paymentAmount)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 font-mono tabular-nums text-right">{formatCurrency(row.closingBalance)}</td>
+                    <tr key={row.installmentNumber} className="hover:bg-slate-700/20">
+                      <td className="p-3 text-sm text-slate-300 font-mono text-left">{row.installmentNumber}</td>
+                      <td className="p-3 text-sm text-slate-400 text-left">{row.paymentDate}</td>
+                      <td className="p-3 text-sm text-slate-300 font-mono text-right">{row.associatedCosts > 0 ? formatCurrency(row.associatedCosts) : '--'}</td>
+                      <td className="p-3 text-sm text-slate-300 font-mono text-right">{formatCurrency(row.openingBalance)}</td>
+                      <td className="p-3 text-sm text-slate-300 font-mono text-right">{formatCurrency(row.principal)}</td>
+                      <td className="p-3 text-sm text-amber-400/80 font-mono text-right">{formatCurrency(row.interest)}</td>
+                      <td className="p-3 text-sm text-emerald-400 font-mono text-right font-semibold">{formatCurrency(row.paymentAmount)}</td>
+                      <td className="p-3 text-sm text-slate-300 font-mono text-right">{formatCurrency(row.closingBalance)}</td>
                     </tr>
                   ))}
                 </tbody>
-                {showFullTable && (
-                  <tfoot>
-                    <tr className="border-t-2 border-emerald-500/30 bg-emerald-500/5">
-                      <td className="px-4 py-3 text-xs font-bold text-emerald-400 uppercase" colSpan={2}>Totales</td>
-                      <td className="px-4 py-3 text-sm font-bold text-emerald-400 font-mono tabular-nums text-right">
-                        {formatCurrency(result.rows.reduce((s, r) => s + r.associatedCosts, 0))}
-                      </td>
-                      <td className="px-4 py-3"></td>
-                      <td className="px-4 py-3 text-sm font-bold text-emerald-400 font-mono tabular-nums text-right">
-                        {formatCurrency(result.rows.reduce((s, r) => s + r.principal, 0))}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-emerald-400 font-mono tabular-nums text-right">
-                        {formatCurrency(result.rows.reduce((s, r) => s + r.interest, 0))}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-bold text-emerald-400 font-mono tabular-nums text-right">
-                        {formatCurrency(result.rows.reduce((s, r) => s + r.paymentAmount, 0))}
-                      </td>
-                      <td className="px-4 py-3"></td>
-                    </tr>
-                  </tfoot>
-                )}
               </table>
+            </div>
+          )}
+
+          {!showFullTable && result.rows.length > 5 && (
+            <div className="px-6 py-3 border-t border-slate-700/30 text-center">
+              <button onClick={() => setShowFullTable(true)} className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">
+                Ver todas las {result.rows.length} cuotas
+              </button>
             </div>
           )}
         </div>
