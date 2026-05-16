@@ -23,20 +23,22 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
     email: '',
     phone: '',
     id_number: '',
-    credit_amount: 0,
-    whatsapp_consent: false,
+    credit_amount: 0
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+
     if (!formData.first_name.trim()) newErrors.first_name = 'El nombre es requerido';
     if (!formData.last_name.trim()) newErrors.last_name = 'El apellido es requerido';
     if (!formData.email.trim()) newErrors.email = 'El email es requerido';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Email invalido';
+    if (!formData.phone.trim()) newErrors.phone = 'El telefono es requerido';
     if (!formData.id_number.trim()) newErrors.id_number = 'El numero de cedula es requerido';
     if (formData.credit_amount <= 0) newErrors.credit_amount = 'El monto debe ser mayor a 0';
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -59,10 +61,6 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
     }
   };
 
-  const handleCheckbox = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, whatsapp_consent: e.target.checked }));
-  };
-
   return (
     <div className="min-h-screen bg-slate-50 pt-28 pb-16">
       <div className="max-w-2xl mx-auto px-6">
@@ -77,10 +75,7 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 md:p-10">
           <div className="mb-8">
             <h1 className="text-2xl md:text-3xl font-bold text-navy-900 mb-2">Informacion Personal</h1>
-            <p className="text-slate-600 text-sm">
-              Completa tus datos para solicitar:{' '}
-              <span className="font-semibold text-emerald-600">{creditTypeLabels[creditType]}</span>
-            </p>
+            <p className="text-slate-600 text-sm">Completa tus datos para solicitar: <span className="font-semibold text-emerald-600">{creditTypeLabels[creditType]}</span></p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -182,25 +177,7 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
               </div>
             </div>
 
-            {/* Autorización WhatsApp */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.whatsapp_consent}
-                  onChange={handleCheckbox}
-                  className="mt-0.5 h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                />
-                <span className="text-sm text-slate-700 leading-relaxed">
-                  Autorizo a{' '}
-                  <span className="font-semibold text-emerald-700">Simbiosis</span>{' '}
-                  a enviarme recordatorios de pago y comunicaciones sobre mi crédito por{' '}
-                  <span className="font-semibold">WhatsApp</span> al número registrado en esta solicitud.
-                </span>
-              </label>
-            </div>
-
-            <div className="flex gap-4 pt-2">
+            <div className="flex gap-4 pt-6">
               <button
                 type="button"
                 onClick={onBack}
