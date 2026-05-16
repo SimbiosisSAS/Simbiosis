@@ -274,6 +274,46 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   return (
     <div className="space-y-6">
       <div className="grid lg:grid-cols-5 gap-6">
+      {/* PANEL CLIENTE APROBADO */}
+  {prefillData && (
+    <div className="lg:col-span-5 bg-slate-800/40 border border-emerald-500/30 rounded-2xl p-6">
+      <h3 className="text-sm font-bold text-emerald-400 mb-4">📋 Solicitud Aprobada</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Tipo</p><p className="text-sm text-slate-200">{prefillData.credit_type?.replace(/_/g,' ')}</p></div>
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Nombre</p><p className="text-sm text-slate-200">{prefillData.first_name} {prefillData.last_name}</p></div>
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Email</p><p className="text-sm text-slate-200">{prefillData.email}</p></div>
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Teléfono</p><p className="text-sm text-slate-200">{prefillData.phone}</p></div>
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Cédula</p><p className="text-sm text-slate-200">{prefillData.id_number}</p></div>
+        <div><p className="text-xs text-slate-500 uppercase mb-1">Monto</p><p className="text-sm text-emerald-400 font-mono font-bold">${Number(prefillData.credit_amount).toLocaleString('es-CO')}</p></div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        {prefillData.id_front_image && (
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Cédula Frontal</p>
+            <a href={prefillData.id_front_image} target="_blank" rel="noopener noreferrer">
+              <img src={prefillData.id_front_image} className="w-full h-32 object-cover rounded-xl border border-slate-700 hover:opacity-80 transition-opacity"/>
+            </a>
+          </div>
+        )}
+        {prefillData.id_back_image && (
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Cédula Reverso</p>
+            <a href={prefillData.id_back_image} target="_blank" rel="noopener noreferrer">
+              <img src={prefillData.id_back_image} className="w-full h-32 object-cover rounded-xl border border-slate-700 hover:opacity-80 transition-opacity"/>
+            </a>
+          </div>
+        )}
+        {prefillData.selfie_image && (
+          <div>
+            <p className="text-xs text-slate-500 uppercase mb-1">Selfie</p>
+            <a href={prefillData.selfie_image} target="_blank" rel="noopener noreferrer">
+              <img src={prefillData.selfie_image} className="w-full h-32 object-cover rounded-xl border border-slate-700 hover:opacity-80 transition-opacity"/>
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
       {prefillData && (
   <div className="bg-slate-800/40 border border-emerald-500/30 rounded-2xl p-6 shadow-lg shadow-emerald-500/5 mb-4">
     <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-2">
