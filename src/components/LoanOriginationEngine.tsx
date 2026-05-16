@@ -273,6 +273,42 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
   return (
     <div className="space-y-6">
       <div className="grid lg:grid-cols-5 gap-6">
+      {prefillData && (
+  <div className="bg-slate-800/40 border border-emerald-500/30 rounded-2xl p-6 shadow-lg shadow-emerald-500/5 mb-4">
+    <h3 className="text-sm font-bold text-emerald-400 mb-4 flex items-center gap-2">
+      <User size={16} /> Datos de la Solicitud Aprobada
+    </h3>
+    <div className="space-y-2 mb-4">
+      <p className="text-xs text-slate-500 uppercase font-semibold">{prefillData.credit_type?.replace(/_/g,' ')}</p>
+      <p className="text-sm text-slate-300"><span className="text-slate-500">Nombre:</span> {prefillData.first_name} {prefillData.last_name}</p>
+      <p className="text-sm text-slate-300"><span className="text-slate-500">Email:</span> {prefillData.email}</p>
+      <p className="text-sm text-slate-300"><span className="text-slate-500">Teléfono:</span> {prefillData.phone}</p>
+      <p className="text-sm text-slate-300"><span className="text-slate-500">Cédula:</span> {prefillData.id_number}</p>
+      <p className="text-sm text-slate-300"><span className="text-slate-500">Monto:</span> ${Number(prefillData.credit_amount).toLocaleString('es-CO')}</p>
+    </div>
+    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Documentos</p>
+    <div className="grid grid-cols-3 gap-2">
+      {prefillData.id_front_image && (
+        <a href={prefillData.id_front_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+          <span className="text-[10px] text-emerald-400 text-center font-semibold">Cédula Frontal</span>
+          <img src={prefillData.id_front_image} className="w-full h-12 object-cover rounded mt-1"/>
+        </a>
+      )}
+      {prefillData.id_back_image && (
+        <a href={prefillData.id_back_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+          <span className="text-[10px] text-emerald-400 text-center font-semibold">Cédula Reverso</span>
+          <img src={prefillData.id_back_image} className="w-full h-12 object-cover rounded mt-1"/>
+        </a>
+      )}
+      {prefillData.selfie_image && (
+        <a href={prefillData.selfie_image} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center p-2 bg-slate-900/50 border border-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+          <span className="text-[10px] text-emerald-400 text-center font-semibold">Selfie</span>
+          <img src={prefillData.selfie_image} className="w-full h-12 object-cover rounded mt-1"/>
+        </a>
+      )}
+    </div>
+  </div>
+)}
         <div className="lg:col-span-2">
           <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-6">
