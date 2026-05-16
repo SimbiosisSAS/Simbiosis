@@ -35,12 +35,6 @@ const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('cred
   const [historialCliente, setHistorialCliente] = useState<any[]>([]);
   const [showReversalModal, setShowReversalModal] = useState(false);
 const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
-const [showRestructuringModal, setShowRestructuringModal] = useState(false);
-const [restructuringParams, setRestructuringParams] = useState({
-  nuevaTasa: 0,
-  nuevosPlazo: 0,
-  capitalizarMora: false,
-});
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
 const [restructuringParams, setRestructuringParams] = useState({
   nuevaTasa: 0,
