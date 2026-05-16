@@ -157,6 +157,16 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
 
   useEffect(() => {
     const fetchNextLoanNumber = async () => {
+      useEffect(() => {
+  if (prefillData && prefillData.id_number) {
+    setParams(p => ({
+      ...p,
+      clientName: `${prefillData.first_name} ${prefillData.last_name}`,
+      clientId: prefillData.id_number,
+      principalAmount: Number(prefillData.credit_amount) || 0
+    }));
+  }
+}, [prefillData]);
       try {
         const { data, error } = await supabase
           .from('active_loans')
