@@ -565,7 +565,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                           </thead>
                           <tbody className="divide-y divide-slate-700/50">
                             {(()=>{
-                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount);
+                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);||selectedLoan.loan_amount);
                               return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index)=>{
                                 const si=tempBal; let sf=Math.max(si-Number(inst.principal_portion),0); tempBal=sf;
                                 const costos=index===0?Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0):0;
