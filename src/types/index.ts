@@ -26,5 +26,4 @@ export interface ApplicationFormData {
   phone: string;
   id_number: string;
   credit_amount: number;
-  whatsapp_consent?: boolean;
 }
