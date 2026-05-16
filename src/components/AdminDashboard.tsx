@@ -668,6 +668,109 @@ const totalDeudaHoy = totalARegularizar + totalCuotasFuturas;
     ventana.document.close();
   }
 };
+  const handleReversarPago = async () => {
+  if (!installmentToRevert || !selectedLoan) return;
+  try {
+    const capitalOriginalPlanificado = Number(installmentToRevert.expected_amount) - Number(installmentToRevert.interest_portion);
+    const { error } = await supabase.from('loan_installments').update({
+      status: 'PENDING',
+      actual_payment_date: null,
+      actual_amount_paid: 0,
+      late_fee_charged: 0,
+      principal_portion: capitalOriginalPlanificado,
+    }).eq('id', installmentToRevert.id);
+    if (error) throw error;
+    setShowReversalModal(false);
+    setInstallmentToRevert(null);
+    await fetchInstallments(selectedLoan.id);
+    await repairFullSchedule();
+    alert('¡Pago revertido correctamente! El plan de pagos fue recalculado.');
+  } catch (err: any) {
+    alert('Error al reversar el pago: ' + err.message);
+  }
+};
+  const handleAplicarReestructuracion = async () => {
+  if (!selectedLoan || loanInstallments.length === 0) return;
+  if (!window.confirm(`¿Confirmas la reestructuración del crédito de ${selectedLoan.client_name}? Esta acción cancela el plan actual y crea uno nuevo.`)) return;
+
+  try {
+    const nuevaTasa = restructuringParams.nuevaTasa / 100;
+    const nuevosPlazo = restructuringParams.nuevosPlazo;
+
+    if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa una tasa válida.'); return; }
+    if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa un plazo válido.'); return; }
+
+    let nuevoSaldo = calculateCurrentBalance();
+
+    if (restructuringParams.capitalizarMora) {
+      const hoyStr = new Date().toISOString().split('T')[0];
+      const moraAcumulada = loanInstallments.reduce((s, i) => {
+        if (i.status === 'PENDING') {
+          const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
+          const h = new Date(); h.setHours(0,0,0,0);
+          if (f < h) {
+            const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount));
+            return s + m.penalty;
+          }
+        }
+        return s + Number(i.late_fee_charged || 0);
+      }, 0);
+      nuevoSaldo += moraAcumulada;
+    }
+
+    const nuevaCuota = Math.round(nuevoSaldo * (nuevaTasa * Math.pow(1 + nuevaTasa, nuevosPlazo)) / (Math.pow(1 + nuevaTasa, nuevosPlazo) - 1));
+
+    // Cancelar cuotas pendientes
+    const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
+    for (const inst of pendientes) {
+      await supabase.from('loan_installments').update({
+        status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0
+      }).eq('id', inst.id);
+    }
+
+    // Crear nuevas cuotas
+    const ultimaCuota = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number)[0];
+    let nextInstNumber = ultimaCuota.installment_number + 1;
+    let lastDate = new Date(ultimaCuota.expected_payment_date);
+    let currentBalance = nuevoSaldo;
+
+    for (let i = 0; i < nuevosPlazo; i++) {
+      lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
+      const interest = Math.round(currentBalance * nuevaTasa);
+      let principal = nuevaCuota - interest;
+      if (principal >= currentBalance || i === nuevosPlazo - 1) principal = Math.round(currentBalance);
+      principal = Math.round(principal);
+
+      await supabase.from('loan_installments').insert({
+        loan_id: selectedLoan.id,
+        installment_number: nextInstNumber,
+        expected_payment_date: lastDate.toISOString().split('T')[0],
+        expected_amount: principal + interest,
+        principal_portion: principal,
+        interest_portion: interest,
+        status: 'PENDING',
+        actual_amount_paid: 0,
+        late_fee_charged: 0,
+      });
+
+      currentBalance = Math.round(currentBalance - principal);
+      nextInstNumber++;
+    }
+
+    // Actualizar active_loans con nuevas condiciones
+    await supabase.from('active_loans').update({
+      interest_rate_monthly: restructuringParams.nuevaTasa,
+      fixed_quota_amount: nuevaCuota,
+      installments: nuevosPlazo,
+    }).eq('id', selectedLoan.id);
+
+    setShowRestructuringModal(false);
+    await fetchInstallments(selectedLoan.id);
+    alert(`¡Crédito reestructurado! Nueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses.`);
+  } catch (err: any) {
+    alert('Error en la reestructuración: ' + err.message);
+  }
+};
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
     
