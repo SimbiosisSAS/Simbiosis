@@ -33,6 +33,14 @@ const [dataForSimulator, setDataForSimulator] = useState<any | null>(null);
   
 const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos');
   const [historialCliente, setHistorialCliente] = useState<any[]>([]);
+  const [showReversalModal, setShowReversalModal] = useState(false);
+const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
+const [showRestructuringModal, setShowRestructuringModal] = useState(false);
+const [restructuringParams, setRestructuringParams] = useState({
+  nuevaTasa: 0,
+  nuevosPlazo: 0,
+  capitalizarMora: false,
+});
 const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
 const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
 
