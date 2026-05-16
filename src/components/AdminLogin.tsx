@@ -147,7 +147,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                 disabled={isLoading}
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-2.5 rounded-lg transition-colors mt-6 disabled:opacity-50"
               >
-                {isLoading ? 'Verificando...' : 'Continuar v2'}
+                {isLoading ? 'Verificando...' : 'Continuar'}
               </button>
             </form>
           </>
