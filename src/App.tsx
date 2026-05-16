@@ -22,7 +22,7 @@ const directSupabase = createClient(supabaseUrl, supabaseKey);
 // ============================================================================
 const uploadDirectly = async (file: File, path: string) => {
   const fileExt = file.name.split('.').pop();
-  const fileName = `${path}-${Date.now()}.${fileExt}`;
+  const fileName = `${path}.${fileExt}`;
 
   const { error } = await directSupabase.storage
     .from('archivos')
@@ -52,12 +52,30 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── SEGURIDAD: Verificar sesión activa al cargar ──────────────────────────
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('admin') === 'true') {
-      // Bloqueo de seguridad: Redirigir al Login en lugar del Panel Directo
-      setCurrentStep('admin-login');
-    }
+    const checkAdminAccess = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('admin') === 'true') {
+        const { data: { session } } = await directSupabase.auth.getSession();
+        if (session) {
+          setCurrentStep('admin');
+        } else {
+          setCurrentStep('admin-login');
+        }
+      }
+    };
+    checkAdminAccess();
+  }, []);
+
+  // ── SEGURIDAD: Escuchar cierre de sesión en tiempo real ───────────────────
+  useEffect(() => {
+    const { data: { subscription } } = directSupabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setCurrentStep('home');
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleStartApplication = () => {
@@ -76,41 +94,39 @@ function App() {
   };
 
   const handleDocumentSubmit = async (images: { idFront: File; idBack: File; selfie: File }) => {
-    if (!formData || !selectedCreditType) return;
-
+    if (!formData) return;
     setIsLoading(true);
     setError(null);
 
     try {
-      // 1. Subir las tres imágenes al bucket 'archivos'
-      const idFrontUrl = await uploadDirectly(images.idFront, 'id-front');
-      const idBackUrl = await uploadDirectly(images.idBack, 'id-back');
-      const selfieUrl = await uploadDirectly(images.selfie, 'selfie');
+      const timestamp = Date.now();
+      const [idFrontUrl, idBackUrl, selfieUrl] = await Promise.all([
+        uploadDirectly(images.idFront, `cedula_frontal_${timestamp}`),
+        uploadDirectly(images.idBack, `cedula_reverso_${timestamp}`),
+        uploadDirectly(images.selfie, `selfie_${timestamp}`),
+      ]);
 
-      // 2. Guardar toda la solicitud de crédito en la base de datos
-      const { error: dbError } = await directSupabase.from('credit_applications')
+      const { error: dbError } = await directSupabase
+        .from('credit_applications')
         .insert({
-          credit_type: selectedCreditType,
+          credit_type: formData.credit_type,
           first_name: formData.first_name,
           last_name: formData.last_name,
           email: formData.email,
           phone: formData.phone,
           id_number: formData.id_number,
           credit_amount: formData.credit_amount,
+          whatsapp_consent: formData.whatsapp_consent || false,
           id_front_image: idFrontUrl,
           id_back_image: idBackUrl,
           selfie_image: selfieUrl,
-          status: 'PENDING'
+          status: 'PENDING',
         });
 
-      if (dbError) {
-        throw new Error(dbError.message);
-      }
-
-      // 3. Mostrar pantalla de éxito al cliente
+      if (dbError) throw dbError;
       setCurrentStep('success');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al procesar la solicitud');
+    } catch (err: any) {
+      setError(err.message ? err.message : 'Error al procesar la solicitud');
       console.error('Error:', err);
     } finally {
       setIsLoading(false);
@@ -136,20 +152,18 @@ function App() {
 
   return (
     <div>
-      {/* Mensajes de Error Globales */}
       {error && (
         <div className="fixed top-4 right-4 bg-red-600 text-white px-6 py-4 rounded-lg shadow-lg z-50">
           {error}
         </div>
       )}
 
-      {/* Ruteador de Pantallas */}
       {currentStep === 'home' && <HomePage onStartApplication={handleStartApplication} />}
-      
+
       {currentStep === 'credit-type' && (
         <CreditTypeSelector onSelect={handleSelectCreditType} onBack={handleBack} />
       )}
-      
+
       {currentStep === 'form' && selectedCreditType && (
         <ApplicationForm
           creditType={selectedCreditType}
@@ -157,7 +171,7 @@ function App() {
           onBack={handleBack}
         />
       )}
-      
+
       {currentStep === 'documents' && formData && (
         <DocumentUpload
           formData={formData}
@@ -166,20 +180,23 @@ function App() {
           isLoading={isLoading}
         />
       )}
-      
+
       {currentStep === 'success' && <SuccessPage onBackHome={handleBackHome} />}
-      
+
       {/* Rutas Administrativas Seguras */}
       {currentStep === 'admin-login' && (
         <AdminLogin onLoginSuccess={() => setCurrentStep('admin')} />
       )}
-      
+
       {currentStep === 'admin' && (
-        <AdminDashboard onLogout={() => setCurrentStep('home')} />
+        <AdminDashboard onLogout={async () => {
+          await directSupabase.auth.signOut();
+          setCurrentStep('home');
+          window.history.replaceState({}, '', window.location.pathname);
+        }} />
       )}
     </div>
   );
 }
 
 export default App;
-
