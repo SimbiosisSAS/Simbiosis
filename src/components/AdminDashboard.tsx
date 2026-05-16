@@ -1303,7 +1303,15 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
                                   <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
                                   <td className="p-3 text-center min-w-[140px]">
                                     {inst.status === 'PENDING' ? (
-                                      <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+  <div className="flex flex-col gap-1">
+    <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+    <button
+      onClick={() => { setNotificationInstallment(inst); setNotificationPhone(''); setShowNotificationModal(true); }}
+      className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/50 rounded-lg text-xs font-semibold transition-colors"
+    >
+      Notificar
+    </button>
+  </div>
                                     ) : (
   <div className="flex flex-col items-center gap-1">
     <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
