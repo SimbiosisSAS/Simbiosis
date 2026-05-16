@@ -138,7 +138,7 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   };
 }
 
-export default function LoanOriginationEngine() {
+export default function LoanOriginationEngine({ prefillData }: { prefillData?: any }) {
   const [params, setParams] = useState<LoanParams>({
     loanNumber: '',
     clientName: '',
