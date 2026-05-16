@@ -1097,6 +1097,26 @@ const handleDeleteApplication = async (appId: string) => {
   >
     <DollarSign size={14} /> Paz y Salvo
   </button>
+                    <button
+  onClick={calculatePazYSalvo}
+  className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"
+>
+  <DollarSign size={14} /> Paz y Salvo
+</button>
+
+<button
+  onClick={() => {
+    setRestructuringParams({
+      nuevaTasa: Number(selectedLoan.interest_rate_monthly || selectedLoan.nominal_rate_mv || 0),
+      nuevosPlazo: 12,
+      capitalizarMora: false,
+    });
+    setShowRestructuringModal(true);
+  }}
+  className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"
+>
+  <Settings size={14} /> Reestructurar
+</button>
   <button
     onClick={generarEstadoCuenta}
     className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"
@@ -1248,11 +1268,16 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
                                     {inst.status === 'PENDING' ? (
                                       <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
                                     ) : (
-                                      <div className="text-xs text-slate-400 flex flex-col items-center">
-                                        <span className="text-emerald-500 font-mono font-bold">{formatCurrency(inst.actual_amount_paid)}</span>
-                                        <span>(Pago)</span>
-                                      </div>
-                                    )}
+  <div className="flex flex-col items-center gap-1">
+    <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
+    <button
+      onClick={() => { setInstallmentToRevert(inst); setShowReversalModal(true); }}
+      className="px-2 py-0.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 rounded text-xs transition-colors"
+    >
+      Reversar
+    </button>
+  </div>
+)}
                                   </td>
                                 </tr>
                               );
@@ -1339,6 +1364,123 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
           </>
         )}
       </div>
+      {/* MODAL REVERSIÓN DE PAGO */}
+{showReversalModal && installmentToRevert && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+        <XCircle className="text-red-500" /> Reversar Pago
+      </h2>
+      <p className="text-slate-400 text-sm mb-6">Esta acción anula el pago registrado y devuelve la cuota a estado pendiente.</p>
+      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2 mb-6">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Cuota:</span>
+          <span className="text-slate-200">#{installmentToRevert.installment_number}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Fecha pagada:</span>
+          <span className="text-slate-200">{installmentToRevert.actual_payment_date}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Monto registrado:</span>
+          <span className="text-red-400 font-mono font-bold">{formatCurrency(installmentToRevert.actual_amount_paid)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Cuota esperada:</span>
+          <span className="text-slate-200 font-mono">{formatCurrency(installmentToRevert.expected_amount)}</span>
+        </div>
+      </div>
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-6">
+        <p className="text-xs text-amber-400">El plan de pagos se recalculará automáticamente después de la reversión.</p>
+      </div>
+      <div className="flex gap-3">
+        <button onClick={() => { setShowReversalModal(false); setInstallmentToRevert(null); }} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+        <button onClick={handleReversarPago} className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors font-bold">Confirmar Reversión</button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* MODAL REESTRUCTURACIÓN */}
+{showRestructuringModal && selectedLoan && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+        <Settings className="text-amber-500" /> Reestructuración de Deuda
+      </h2>
+      <p className="text-slate-400 text-sm mb-6">Modifica las condiciones del crédito de <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+
+      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Saldo actual:</span>
+          <span className="text-white font-mono font-bold">{formatCurrency(calculateCurrentBalance())}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Tasa actual:</span>
+          <span className="text-slate-300">{selectedLoan.interest_rate_monthly ?? selectedLoan.nominal_rate_mv ?? '--'}% MV</span>
+        </div>
+      </div>
+
+      <div className="space-y-4 mb-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nueva Tasa MV (%)</label>
+          <input
+            type="number" step="0.01" min="0"
+            value={restructuringParams.nuevaTasa || ''}
+            onChange={e => setRestructuringParams(p => ({ ...p, nuevaTasa: Number(e.target.value) }))}
+            className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500"
+            placeholder="Ej: 0.8"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label>
+          <input
+            type="number" min="1"
+            value={restructuringParams.nuevosPlazo || ''}
+            onChange={e => setRestructuringParams(p => ({ ...p, nuevosPlazo: Number(e.target.value) }))}
+            className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500"
+            placeholder="Ej: 12"
+          />
+        </div>
+        <label className="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded-xl cursor-pointer hover:border-amber-500/50 transition-colors">
+          <input
+            type="checkbox"
+            checked={restructuringParams.capitalizarMora}
+            onChange={e => setRestructuringParams(p => ({ ...p, capitalizarMora: e.target.checked }))}
+            className="h-4 w-4 text-amber-500"
+          />
+          <div>
+            <p className="text-sm text-slate-200 font-medium">Capitalizar mora acumulada</p>
+            <p className="text-xs text-slate-500">Suma la mora al capital — el cliente no paga mora hoy pero aumenta su deuda</p>
+          </div>
+        </label>
+      </div>
+
+      {restructuringParams.nuevaTasa > 0 && restructuringParams.nuevosPlazo > 0 && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 mb-4">
+          <p className="text-xs text-slate-400 mb-1">Nueva cuota estimada:</p>
+          <p className="text-xl font-bold text-emerald-400 font-mono">
+            {formatCurrency(Math.round(
+              (calculateCurrentBalance() + (restructuringParams.capitalizarMora ? loanInstallments.filter(i => i.status === 'PENDING').reduce((s, i) => { const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0); const h = new Date(); h.setHours(0,0,0,0); return f < h ? s + calculateLateFee(i.expected_payment_date, new Date().toISOString().split('T')[0], Number(i.expected_amount)).penalty : s; }, 0) : 0)) *
+              ((restructuringParams.nuevaTasa / 100) * Math.pow(1 + restructuringParams.nuevaTasa / 100, restructuringParams.nuevosPlazo)) /
+              (Math.pow(1 + restructuringParams.nuevaTasa / 100, restructuringParams.nuevosPlazo) - 1)
+            ))}
+          </p>
+          <p className="text-xs text-slate-500 mt-1">por {restructuringParams.nuevosPlazo} meses</p>
+        </div>
+      )}
+
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-6">
+        <p className="text-xs text-red-400">Las cuotas pendientes actuales serán canceladas y se creará un nuevo plan de pagos.</p>
+      </div>
+
+      <div className="flex gap-3">
+        <button onClick={() => setShowRestructuringModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+        <button onClick={handleAplicarReestructuracion} className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl transition-colors font-bold">Aplicar Reestructuración</button>
+      </div>
+    </div>
+  </div>
+)}
 {showPazYSalvoModal && pazYSalvoData && selectedLoan && (
   <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
