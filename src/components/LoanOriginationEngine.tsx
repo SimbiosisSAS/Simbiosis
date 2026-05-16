@@ -155,6 +155,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
 
   // Pre-llenado con datos del cliente aprobado
   useEffect(() => {
+    console.log('PREFILL DATA:', JSON.stringify(prefillData, null, 2));
     if (prefillData && prefillData.id_number) {
       setParams(p => ({
         ...p,
