@@ -1409,6 +1409,69 @@ const valorCuotaTotal = Number(inst.expected_amount); // costos ya capitalizados
           </>
         )}
       </div>
+      {showNotificationModal && notificationInstallment && selectedLoan && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+        <Phone className="text-blue-400" /> Enviar Notificación WhatsApp
+      </h2>
+      <p className="text-slate-400 text-sm mb-6">
+        Recordatorio de pago para <span className="text-white font-semibold">{selectedLoan.client_name}</span>
+      </p>
+
+      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2 mb-4">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Cuota:</span>
+          <span className="text-slate-200">#{notificationInstallment.installment_number}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Monto:</span>
+          <span className="text-emerald-400 font-mono font-bold">{formatCurrency(notificationInstallment.expected_amount)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Vence:</span>
+          <span className="text-slate-200">{new Date(notificationInstallment.expected_payment_date).toLocaleDateString('es-CO')}</span>
+        </div>
+      </div>
+
+      <div className="mb-6">
+        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
+          WhatsApp del cliente (con código de país)
+        </label>
+        <input
+          type="tel"
+          value={notificationPhone}
+          onChange={e => setNotificationPhone(e.target.value)}
+          placeholder="+573001234567"
+          className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 font-mono"
+        />
+        <p className="text-xs text-slate-500 mt-1">Ejemplo Colombia: +573001234567</p>
+      </div>
+
+      <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-6">
+        <p className="text-xs text-blue-400">
+          El cliente debe haber enviado previamente un mensaje al número de Twilio Sandbox para poder recibir notificaciones.
+        </p>
+      </div>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => { setShowNotificationModal(false); setNotificationPhone(''); setNotificationInstallment(null); }}
+          className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleEnviarNotificacion}
+          disabled={!notificationPhone || sendingNotification}
+          className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50"
+        >
+          {sendingNotification ? 'Enviando...' : 'Enviar WhatsApp'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* MODAL REVERSIÓN DE PAGO */}
 {showReversalModal && installmentToRevert && (
   <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
