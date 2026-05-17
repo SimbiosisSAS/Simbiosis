@@ -41,13 +41,25 @@ const [sendingNotif, setSendingNotif] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
   const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
-const ScoreCard = ({ app }: { app: any }) => {
+const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (obs: string) => void }) => {
+  const [obs, setObs] = useState(app.admin_observaciones || '');
+  const [saving, setSaving] = useState(false);
   const ok = app.score_result === 'APROBADO';
   const rev = app.score_result === 'REVISAR';
   const bg = ok ? 'bg-emerald-900/30 border-emerald-700' : rev ? 'bg-amber-900/30 border-amber-700' : 'bg-red-900/30 border-red-700';
   const txt = ok ? 'text-emerald-400' : rev ? 'text-amber-400' : 'text-red-400';
   const bar = ok ? 'bg-emerald-500' : rev ? 'bg-amber-500' : 'bg-red-500';
   const label = ok ? '✅ APROBADO' : rev ? '⚠️ REVISAR' : '❌ RECHAZAR';
+  const razones = app.score_razones ? app.score_razones.split(' | ').filter(Boolean) : [];
+
+  const handleSave = async () => {
+    setSaving(true);
+    await supabase.from('credit_applications').update({ admin_observaciones: obs }).eq('id', app.id);
+    setSaving(false);
+    if (onSaveObservacion) onSaveObservacion(obs);
+    alert('Observación guardada');
+  };
+
   return (
     <div className={`p-4 rounded-xl border mb-4 ${bg}`}>
       <div className="flex justify-between items-center mb-3">
@@ -57,7 +69,7 @@ const ScoreCard = ({ app }: { app: any }) => {
       <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
         <div className={`h-2 rounded-full ${bar}`} style={{ width: `${app.credit_score}%` }} />
       </div>
-      <div className="space-y-1 text-xs">
+      <div className="space-y-1 text-xs mb-3">
         <div className="flex justify-between"><span className="text-slate-400">Ingresos:</span><span className="text-slate-200 font-mono">$ {Number(app.monthly_income||0).toLocaleString('es-CO')}</span></div>
         <div className="flex justify-between"><span className="text-slate-400">Gastos:</span><span className="text-slate-200 font-mono">$ {Number(app.monthly_expenses||0).toLocaleString('es-CO')}</span></div>
         <div className="flex justify-between"><span className="text-slate-400">Otras deudas:</span><span className="text-slate-200 font-mono">$ {Number(app.other_debts||0).toLocaleString('es-CO')}</span></div>
@@ -67,10 +79,34 @@ const ScoreCard = ({ app }: { app: any }) => {
           <span className={`font-bold ${txt}`}>{label}</span>
         </div>
       </div>
+      {razones.length > 0 && (
+        <div className="bg-slate-900/50 rounded-lg p-3 mb-3">
+          <p className="text-xs font-bold text-slate-400 uppercase mb-2">⚠️ Alertas del sistema:</p>
+          {razones.map((r: string, i: number) => (
+            <p key={i} className="text-xs text-red-400 mb-1">• {r}</p>
+          ))}
+        </div>
+      )}
+      <div>
+        <p className="text-xs font-bold text-slate-400 uppercase mb-1">Observación del asesor:</p>
+        <textarea
+          value={obs}
+          onChange={e => setObs(e.target.value)}
+          placeholder="Escribe aquí tu análisis o decisión manual..."
+          className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-emerald-500 resize-none"
+          rows={3}
+        />
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-1 w-full py-1.5 bg-slate-700 hover:bg-emerald-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition-colors"
+        >
+          {saving ? 'Guardando...' : 'Guardar Observación'}
+        </button>
+      </div>
     </div>
   );
-};
-  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+};  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   useEffect(() => {
     fetchUsuryRates();
@@ -711,7 +747,7 @@ const handleEnviarNotificacion = async () => {
                       <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
                     </div>
                     {selectedApp.score_result && selectedApp.score_result !== 'PENDIENTE' && (
-                      <ScoreCard app={selectedApp} />
+                      <ScoreCard app={selectedApp} onSaveObservacion={(obs) => console.log('obs', obs)} />
                     )}
                     {selectedApp.id_front_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl"/></div>}
                     {selectedApp.id_back_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl"/></div>}

@@ -15,25 +15,50 @@ const creditTypeLabels: Record<CreditType, string> = {
   MICROCREDIT: 'Microcredito'
 };
 
-const calcularScore = (data: any): { score: number; result: string; detalle: any } => {
+const calcularScore = (data: any): { score: number; result: string; razones: string[] } => {
+  const razones: string[] = [];
   const tasa = 0.015;
   const meses = 12;
-  const cuotaEstimada = data.credit_amount * (tasa * Math.pow(1 + tasa, meses)) / (Math.pow(1 + tasa, meses) - 1);
+  const cuotaEstimada = data.credit_amount > 0
+    ? data.credit_amount * (tasa * Math.pow(1 + tasa, meses)) / (Math.pow(1 + tasa, meses) - 1)
+    : 0;
+
   const ingresoDisponible = data.monthly_income - data.monthly_expenses - data.other_debts;
   const ratio = cuotaEstimada > 0 ? ingresoDisponible / cuotaEstimada : 0;
+  const relacionMonto = data.monthly_income > 0 ? data.credit_amount / data.monthly_income : 99;
+  const relacionGastos = data.monthly_income > 0 ? (data.monthly_expenses / data.monthly_income) : 1;
 
-  let scoreCapacidad = ratio >= 3 ? 100 : ratio >= 2 ? 80 : ratio >= 1.5 ? 60 : ratio >= 1.2 ? 40 : 20;
+  // Factor 1: Capacidad de pago (40%)
+  let scoreCapacidad = ratio >= 3 ? 100 : ratio >= 2 ? 80 : ratio >= 1.5 ? 60 : ratio >= 1.2 ? 40 : 10;
+  if (scoreCapacidad < 40) razones.push('Capacidad de pago insuficiente para cubrir la cuota mensual');
+
+  // Factor 2: Relación monto solicitado vs ingreso (20%)
+  let scoreMonto = relacionMonto <= 3 ? 100 : relacionMonto <= 5 ? 70 : relacionMonto <= 8 ? 40 : 10;
+  if (scoreMonto < 40) razones.push('Monto solicitado muy alto en relación con los ingresos mensuales');
+
+  // Factor 3: Estabilidad laboral (25%)
   let scoreEstabilidad = data.employment_months >= 24 ? 100 : data.employment_months >= 12 ? 75 : data.employment_months >= 6 ? 50 : 25;
+  if (scoreEstabilidad < 50) razones.push('Tiempo en empleo o negocio actual insuficiente');
+
+  // Factor 4: Tipo de empleo (10%)
   let scoreEmpleo = data.employment_type === 'empleado' ? 100 : data.employment_type === 'empresario' ? 80 : 60;
 
-  const scoreTotal = Math.round(scoreCapacidad * 0.6 + scoreEstabilidad * 0.3 + scoreEmpleo * 0.1);
-  const result = scoreTotal >= 70 ? 'APROBADO' : scoreTotal >= 50 ? 'REVISAR' : 'RECHAZAR';
+  // Factor 5: Nivel de gastos vs ingreso (5%)
+  let scoreGastos = relacionGastos <= 0.4 ? 100 : relacionGastos <= 0.6 ? 70 : relacionGastos <= 0.7 ? 40 : 10;
+  if (scoreGastos < 40) razones.push('Nivel de gastos mensuales muy elevado respecto a los ingresos');
 
-  return {
-    score: scoreTotal,
-    result,
-    detalle: { scoreCapacidad, scoreEstabilidad, scoreEmpleo, cuotaEstimada, ingresoDisponible, ratio }
-  };
+  const scoreTotal = Math.round(
+    scoreCapacidad * 0.40 +
+    scoreMonto * 0.20 +
+    scoreEstabilidad * 0.25 +
+    scoreEmpleo * 0.10 +
+    scoreGastos * 0.05
+  );
+
+  const result = scoreTotal >= 75 ? 'APROBADO' : scoreTotal >= 55 ? 'REVISAR' : 'RECHAZAR';
+  if (razones.length === 0 && result === 'REVISAR') razones.push('Perfil requiere verificación adicional de documentos');
+
+  return { score: scoreTotal, result, razones };
 };
 
 export default function ApplicationForm({ creditType, onSubmit, onBack }: ApplicationFormProps) {
@@ -88,14 +113,15 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
     e.preventDefault();
     if (!validateStep2()) return;
     const { score, result } = calcularScore(formData);
-    onSubmit({ ...formData, credit_score: score, score_result: result } as any);
-  };
+    onSubmit({
+    ...formData,
+    credit_score: score,
+    score_result: result,
+    score_razones: razones.join(' | '),
+  } as any);
+};
 
   const fmt = (val: number) => '$ ' + Math.round(val).toLocaleString('es-CO');
-
-  const scorePreview = (formData as any).monthly_income > 0 && (formData as any).employment_type
-    ? calcularScore(formData)
-    : null;
 
   const inputClass = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all text-sm';
   const labelClass = 'block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5';
@@ -265,19 +291,11 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
                 </div>
 
                 {/* Score preview en tiempo real */}
-                {scorePreview && (
-                  <div className={`rounded-xl p-4 border ${scorePreview.result === 'APROBADO' ? 'bg-emerald-50 border-emerald-200' : scorePreview.result === 'REVISAR' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-slate-600 uppercase">Indicador de elegibilidad</span>
-                      <span className={`text-sm font-bold ${scorePreview.result === 'APROBADO' ? 'text-emerald-600' : scorePreview.result === 'REVISAR' ? 'text-amber-600' : 'text-red-600'}`}>
-                        {scorePreview.result === 'APROBADO' ? '✅ Perfil favorable' : scorePreview.result === 'REVISAR' ? '⚠️ Requiere revisión' : '❌ Perfil de riesgo alto'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Cuota estimada: <strong>{fmt(scorePreview.detalle.cuotaEstimada)}/mes</strong> · Ingreso disponible: <strong>{fmt(scorePreview.detalle.ingresoDisponible)}</strong>
-                    </div>
-                  </div>
-                )}
+                <div className="bg-slate-100 border border-slate-200 rounded-xl p-3">
+  <p className="text-xs text-slate-500 text-center">
+    📋 Tu solicitud será evaluada por nuestro equipo en las próximas horas hábiles.
+  </p>
+</div>
               </div>
 
               <div className="flex gap-3 pt-6">

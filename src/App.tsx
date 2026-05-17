@@ -121,6 +121,8 @@ function App() {
     id_back_image: idBackUrl,
     selfie_image: selfieUrl,
     status: 'PENDING',
+    score_razones: (formData as any).score_razones || '',
+          admin_observaciones: '',
     monthly_income: (formData as any).monthly_income || 0,
     employment_type: (formData as any).employment_type || '',
     employment_months: (formData as any).employment_months || 0,
