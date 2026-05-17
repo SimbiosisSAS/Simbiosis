@@ -8,6 +8,7 @@ import DocumentUpload from './components/DocumentUpload';
 import SuccessPage from './components/SuccessPage';
 import AdminDashboard from './components/AdminDashboard';
 import AdminLogin from './components/AdminLogin';
+import ClientPortal from './components/ClientPortal';
 
 // ============================================================================
 // CONEXIÓN A SUPABASE (DIRECTA PARA EVITAR FALLOS DE CACHÉ EN BOLT)
@@ -43,7 +44,7 @@ const uploadDirectly = async (file: File, path: string) => {
 // ============================================================================
 // COMPONENTE PRINCIPAL (ENRUTADOR DE PANTALLAS)
 // ============================================================================
-type AppStep = 'home' | 'credit-type' | 'form' | 'documents' | 'success' | 'admin' | 'admin-login';
+type AppStep = 'home' | 'credit-type' | 'form' | 'documents' | 'success' | 'admin' | 'admin-login' | 'client-portal';
 
 function App() {
   const [currentStep, setCurrentStep] = useState<AppStep>('home');
@@ -54,19 +55,13 @@ function App() {
 
   // ── SEGURIDAD: Verificar sesión activa al cargar ──────────────────────────
   useEffect(() => {
-    const checkAdminAccess = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('admin') === 'true') {
-        const { data: { session } } = await directSupabase.auth.getSession();
-        if (session) {
-          setCurrentStep('admin');
-        } else {
-          setCurrentStep('admin-login');
-        }
-      }
-    };
-    checkAdminAccess();
-  }, []);
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('admin') === 'true') {
+    setCurrentStep('admin-login');
+  } else if (urlParams.get('portal') === 'true') {
+    setCurrentStep('client-portal');
+  }
+}, []);
 
   // ── SEGURIDAD: Escuchar cierre de sesión en tiempo real ───────────────────
   useEffect(() => {
@@ -195,7 +190,7 @@ function App() {
       {/* Rutas Administrativas Seguras */}
       {currentStep === 'admin-login' && (
         <AdminLogin onLoginSuccess={() => setCurrentStep('admin')} />
-      )}
+      )} {currentStep === 'client-portal' && <ClientPortal />}
 
       {currentStep === 'admin' && (
         <AdminDashboard onLogout={async () => {
