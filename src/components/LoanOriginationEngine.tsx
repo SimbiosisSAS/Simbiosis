@@ -5,6 +5,7 @@ import { Calculator, FileDown, Rocket, TrendingUp, DollarSign, Percent, Calendar
 interface AmortizationRow {
   installmentNumber: number;
   paymentDate: string;
+  paymentDateISO: string;
   associatedCosts: number;
   openingBalance: number;
   principal: number;
@@ -20,6 +21,7 @@ interface LoanParams {
   principalAmount: number;
   originationCosts: number;
   disbursementDate: string;
+  firstPaymentDate: string;
   nominalRateMV: number;
   termMonths: number;
 }
