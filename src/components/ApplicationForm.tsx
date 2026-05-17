@@ -112,7 +112,7 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateStep2()) return;
-    const { score, result } = calcularScore(formData);
+    const { score, result, razones = [] } = calcularScore(formData);
     onSubmit({
     ...formData,
     credit_score: score,
