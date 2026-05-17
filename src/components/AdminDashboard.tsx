@@ -31,6 +31,9 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
   const [restructuringParams, setRestructuringParams] = useState({ nuevaTasa: 0, nuevosPlazo: 0, capitalizarMora: false });
+  const [showNotifModal, setShowNotifModal] = useState(false);
+const [notifData, setNotifData] = useState({ phone: '', installment: null as any });
+const [sendingNotif, setSendingNotif] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationPhone, setNotificationPhone] = useState('');
   const [notificationInstallment, setNotificationInstallment] = useState<any | null>(null);
@@ -324,7 +327,32 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
     const ventana = window.open('','_blank','width=1100,height=800');
     if(ventana){ventana.document.write(html);ventana.document.close();}
   };
-
+const handleEnviarNotificacion = async () => {
+  if (!notifData.phone || !notifData.installment || !selectedLoan) return;
+  setSendingNotif(true);
+  try {
+    const phone = notifData.phone.replace(/\s+/g, '').replace(/^0+/, '');
+    const monto = Number(notifData.installment.expected_amount).toLocaleString('es-CO');
+    const fecha = new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO', {
+      day: 'numeric', month: 'long', year: 'numeric'
+    });
+    const { error } = await supabase.functions.invoke('send-whatsapp', {
+      body: {
+        to: phone.startsWith('+') ? phone : `+57${phone}`,
+        clientName: selectedLoan.client_name,
+        monto,
+        fechaVencimiento: fecha,
+      }
+    });
+    if (error) throw error;
+    alert(`✅ Notificación enviada a ${notifData.phone}`);
+    setShowNotifModal(false);
+  } catch (err: any) {
+    alert('Error al enviar: ' + err.message);
+  } finally {
+    setSendingNotif(false);
+  }
+};
   const handleReversarPago = async () => {
     if (!installmentToRevert || !selectedLoan) return;
     try {
@@ -583,18 +611,29 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
                                     <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
                                     <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
                                     <td className="p-3 text-center min-w-[140px]">
-                                      {inst.status==='PENDING'?(
-                                        <div className="flex flex-col gap-1">
-                                          <button onClick={()=>openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
-                                          <button onClick={()=>{setNotificationInstallment(inst);setNotificationPhone('');setShowNotificationModal(true);}} className="px-3 py-1 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/50 rounded-lg text-xs font-semibold transition-colors">Notificar</button>
-                                        </div>
-                                      ):(
-                                        <div className="flex flex-col items-center gap-1">
-                                          <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
-                                          <button onClick={()=>{setInstallmentToRevert(inst);setShowReversalModal(true);}} className="px-2 py-0.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 rounded text-xs transition-colors">Reversar</button>
-                                        </div>
-                                      )}
-                                    </td>
+  {inst.status === 'PENDING' ? (
+    <div className="flex gap-1">
+      <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+      <button
+        onClick={() => { setNotifData({ phone: '', installment: inst }); setShowNotifModal(true); }}
+        className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/50 rounded-lg text-xs transition-colors"
+        title="Enviar recordatorio WhatsApp"
+      >
+        💬
+      </button>
+    </div>
+  ) : (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
+      <button
+        onClick={() => { setInstallmentToRevert(inst); setShowReversalModal(true); }}
+        className="px-2 py-0.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 rounded text-xs transition-colors"
+      >
+        Reversar
+      </button>
+    </div>
+  )}
+</td>
                                   </tr>
                                 );
                               });
@@ -652,7 +691,51 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
           </>
         )}
       </div>
-
+{showNotifModal && notifData.installment && selectedLoan && (
+  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <h2 className="text-xl font-bold text-white mb-2">💬 Recordatorio WhatsApp</h2>
+      <p className="text-slate-400 text-sm mb-6">
+        Enviar recordatorio a <span className="text-white font-semibold">{selectedLoan.client_name}</span>
+      </p>
+      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Cuota:</span>
+          <span className="text-slate-200">#{notifData.installment.installment_number}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Vencimiento:</span>
+          <span className="text-slate-200">{notifData.installment.expected_payment_date}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-400">Monto:</span>
+          <span className="text-emerald-400 font-mono font-bold">{formatCurrency(notifData.installment.expected_amount)}</span>
+        </div>
+      </div>
+      <div className="mb-4">
+        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">WhatsApp del cliente</label>
+        <input
+          type="tel"
+          value={notifData.phone}
+          onChange={e => setNotifData(p => ({ ...p, phone: e.target.value }))}
+          placeholder="+573001234567"
+          className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500"
+        />
+        <p className="text-xs text-slate-500 mt-1">Colombia: +57 seguido del número sin el 0 inicial</p>
+      </div>
+      <div className="bg-green-900/20 border border-green-700/30 rounded-xl p-3 mb-6">
+        <p className="text-xs text-green-400 font-semibold mb-1">Vista previa:</p>
+        <p className="text-xs text-slate-300 whitespace-pre-line">{`Hola ${selectedLoan.client_name} 👋\n\nTu cuota con Simbiosis por $${Number(notifData.installment.expected_amount).toLocaleString('es-CO')} vence el ${new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}.\n\nPaga a tiempo y evita intereses de mora.\n\nSimbiosis — conoce, invierte, crece`}</p>
+      </div>
+      <div className="flex gap-3">
+        <button onClick={() => setShowNotifModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+        <button onClick={handleEnviarNotificacion} disabled={!notifData.phone || sendingNotif} className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">
+          {sendingNotif ? 'Enviando...' : '📤 Enviar WhatsApp'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* MODAL REVERSIÓN */}
       {showReversalModal&&installmentToRevert&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
