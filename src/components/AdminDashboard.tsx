@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp, XCircle, Phone } from 'lucide-react';
+import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp, XCircle, Phone, Archive  } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 import IndicadoresCartera from './IndicadoresCartera';
 import ReporteCarteraPDF from './ReporteCarteraPDF';
@@ -600,10 +600,10 @@ const handleEnviarNotificacion = async () => {
   <div className="flex items-center gap-2">
   <button
   onClick={() => setShowLiquidados(!showLiquidados)}
-  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${showLiquidados ? 'bg-slate-500 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showLiquidados ? 'bg-slate-600 text-white border-slate-500' : 'bg-slate-800/40 text-slate-300 border-slate-600/50 hover:text-white hover:border-slate-400'}`}
 >
-    📁 {showLiquidados ? 'Ocultar Liquidados' : 'Ver Liquidados'}
-  </button>
+  <Archive size={14} /> {showLiquidados ? 'Ocultar Liquidados' : 'Ver Liquidados'}
+</button>
   <ReporteCarteraPDF />
 </div>
 </div>
