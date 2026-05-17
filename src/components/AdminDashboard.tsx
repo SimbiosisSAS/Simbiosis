@@ -405,21 +405,6 @@ const handleEnviarNotificacion = async () => {
     } catch (err: any) { alert('Error en reestructuración: ' + err.message); }
   };
 
-  const handleEnviarNotificacion = async () => {
-    if (!notificationInstallment || !selectedLoan || !notificationPhone) return;
-    setSendingNotification(true);
-    try {
-      const response = await fetch('/api/send-whatsapp', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: notificationPhone, clientName: selectedLoan.client_name, installmentNumber: notificationInstallment.installment_number, amount: notificationInstallment.expected_amount, dueDate: new Date(notificationInstallment.expected_payment_date).toLocaleDateString('es-CO') }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Error enviando mensaje');
-      alert(`¡Notificación enviada a ${notificationPhone}!`);
-      setShowNotificationModal(false); setNotificationPhone(''); setNotificationInstallment(null);
-    } catch (err: any) { alert('Error: ' + err.message); }
-    finally { setSendingNotification(false); }
-  };
 
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
