@@ -165,7 +165,7 @@ export default function CreditDemoModal({ isOpen, onClose, onApply }: CreditDemo
           {/* Rate Info */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
             <Info className="w-4 h-4 text-slate-400 flex-shrink-0" />
-            <span className="text-xs text-slate-500">Tasa mensual estimada: <span className="font-bold text-navy-700">{currentType.rate}%</span> | Tasa anual equivalente: <span className="font-bold text-navy-700">{(Math.pow(1 + currentType.rate / 100, 12) - 1).toFixed(1)}%</span></span>
+            <span className="text-xs text-slate-500">Tasa mensual estimada: <span className="font-bold text-navy-700">{currentType.rate}%</span></span>
           </div>
 
           {/* Results */}

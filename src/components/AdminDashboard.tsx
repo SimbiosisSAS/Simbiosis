@@ -6,6 +6,7 @@ import LoanOriginationEngine from './LoanOriginationEngine';
 import IndicadoresCartera from './IndicadoresCartera';
 import ReporteCarteraPDF from './ReporteCarteraPDF';
 import ReporteProvisionesPDF from './ReporteProvisionesPDF';
+import GeneradorPagare from './GeneradorPagare';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador' | 'configuracion';
 
@@ -609,6 +610,7 @@ const handleEnviarNotificacion = async () => {
                     <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
                       <div><h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2><p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p></div>
                       <div className="flex gap-2 flex-wrap">
+                        <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
                         <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
                         <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
                         <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>

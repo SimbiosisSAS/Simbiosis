@@ -180,7 +180,7 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                 </h1>
 
                 <p className="text-lg text-slate-300 leading-relaxed mb-10 max-w-lg">
-                  Creditos corporativos impulsados por IA con aprobacion rapida, terminos flexibles y soluciones disenadas para empresas en crecimiento en Latinoamerica.
+                  Créditos corporativos impulsados por IA con aprobación rápida, términos flexibles y soluciones diseñadas para empresas en crecimiento en Latinoamérica.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4 mb-12">
@@ -276,23 +276,6 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest text-center mb-8">
               Respaldo institucional y regulatorio
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
-              {[
-                { name: 'Banco de la Republica', icon: Landmark },
-                { name: 'Superfinanciera', icon: Shield },
-                { name: 'Fondo Nacional', icon: Building2 },
-                { name: 'Fintech Colombia', icon: Cpu },
-                { name: 'SEC Compliant', icon: FileCheck },
-              ].map((partner, idx) => {
-                const Icon = partner.icon;
-                return (
-                  <div key={idx} className="flex items-center gap-2 text-slate-400 hover:text-navy-700 transition-colors group">
-                    <Icon className="w-5 h-5" />
-                    <span className="text-sm font-medium">{partner.name}</span>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </section>
 
