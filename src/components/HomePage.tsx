@@ -95,16 +95,13 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
             ))}
           </div>
 
-          <div className="hidden lg:flex items-center gap-3">
-            <button className="btn-ghost font-semibold text-navy-700">
-              Iniciar Sesion
-            </button>
-            <button
-              onClick={onStartApplication}
-              className="btn-primary !px-6 !py-2.5"
-            >
-              Crear Cuenta
-            </button>
+          <div className="hidden lg:flex items-center gap-4">
+  <button
+    onClick={() => window.location.href = '/?portal=true'}
+    className="btn-primary !px-6 !py-2.5"
+  >
+    Mi Crédito
+  </button>
           </div>
 
           <button
@@ -133,15 +130,12 @@ export default function HomePage({ onStartApplication }: HomePageProps) {
                 </a>
               ))}
               <div className="pt-4 border-t border-slate-200 space-y-2">
-                <button className="w-full text-left px-4 py-3 rounded-lg text-navy-700 font-semibold hover:bg-slate-50">
-                  Iniciar Sesion
-                </button>
                 <button
-                  onClick={onStartApplication}
-                  className="w-full btn-primary text-center"
-                >
-                  Crear Cuenta
-                </button>
+  onClick={() => window.location.href = '/?portal=true'}
+  className="w-full btn-primary text-center"
+>
+  Mi Crédito
+</button>
               </div>
             </div>
           </div>
