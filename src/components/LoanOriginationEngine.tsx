@@ -78,9 +78,12 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
   let balance = amountToFinance;
   const startDate = new Date(disbursementDate + 'T00:00:00');
 
+  const basePaymentDate = params.firstPaymentDate
+    ? new Date(params.firstPaymentDate + 'T00:00:00')
+    : new Date(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate());
+
   for (let i = 1; i <= n; i++) {
-    const paymentDate = new Date(startDate);
-    paymentDate.setMonth(paymentDate.getMonth() + i);
+    const paymentDate = new Date(basePaymentDate.getFullYear(), basePaymentDate.getMonth() + (i - 1), basePaymentDate.getDate());
 
     const interestPortion = balance * r;
     let principalPortion = fixedPayment - interestPortion;
@@ -94,6 +97,7 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
     rows.push({
       installmentNumber: i,
       paymentDate: formatDate(paymentDate),
+      paymentDateISO: paymentDate.toISOString().split('T')[0],
       associatedCosts: costs,
       openingBalance: Math.round(balance),
       principal: Math.round(principalPortion),
@@ -118,6 +122,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     principalAmount: 0,
     originationCosts: 0,
     disbursementDate: '',
+    firstPaymentDate: '',
     nominalRateMV: 0,
     termMonths: 0,
   });
@@ -228,21 +233,17 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         throw loanError;
       }
 
-      const installmentsToInsert = result.rows.map(row => {
-        const paymentDate = new Date(params.disbursementDate);
-        paymentDate.setMonth(paymentDate.getMonth() + row.installmentNumber);
-        return {
-          loan_id: loanData.id,
-          installment_number: row.installmentNumber,
-          expected_payment_date: paymentDate.toISOString().split('T')[0],
-          expected_amount: row.paymentAmount,
-          principal_portion: row.principal,
-          interest_portion: row.interest,
-          status: 'PENDING',
-          actual_amount_paid: 0,
-          late_fee_charged: 0,
-        };
-      });
+      const installmentsToInsert = result.rows.map(row => ({
+        loan_id: loanData.id,
+        installment_number: row.installmentNumber,
+        expected_payment_date: row.paymentDateISO,
+        expected_amount: row.paymentAmount,
+        principal_portion: row.principal,
+        interest_portion: row.interest,
+        status: 'PENDING',
+        actual_amount_paid: 0,
+        late_fee_charged: 0,
+      }));
 
       const { error: installmentsError } = await supabase
         .from('loan_installments')
@@ -389,6 +390,11 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
                 <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha de Desembolso</label>
                 <input type="date" value={params.disbursementDate} onChange={(e) => setParams(p => ({ ...p, disbursementDate: e.target.value }))} className={inputClass} />
               </div>
+              <div>
+  <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha del Primer Pago (opcional)</label>
+  <input type="date" value={params.firstPaymentDate} onChange={e => setParams(p => ({ ...p, firstPaymentDate: e.target.value }))} className={inputClass} />
+  <p className="text-xs text-slate-500 mt-1">Déjalo vacío para pagar 1 mes después del desembolso</p>
+</div>
               <div>
                 <label className={labelClass}><Percent className="w-3 h-3 inline mr-1" />Tasa Nominal MV (%)</label>
                 <input type="number" value={params.nominalRateMV || ''} onChange={(e) => setParams(p => ({ ...p, nominalRateMV: Number(e.target.value) }))} className={inputClass} placeholder="1.5" min="0" step="0.01" />
