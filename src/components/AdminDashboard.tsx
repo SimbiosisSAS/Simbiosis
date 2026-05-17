@@ -41,6 +41,35 @@ const [sendingNotif, setSendingNotif] = useState(false);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
   const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
+const ScoreCard = ({ app }: { app: any }) => {
+  const ok = app.score_result === 'APROBADO';
+  const rev = app.score_result === 'REVISAR';
+  const bg = ok ? 'bg-emerald-900/30 border-emerald-700' : rev ? 'bg-amber-900/30 border-amber-700' : 'bg-red-900/30 border-red-700';
+  const txt = ok ? 'text-emerald-400' : rev ? 'text-amber-400' : 'text-red-400';
+  const bar = ok ? 'bg-emerald-500' : rev ? 'bg-amber-500' : 'bg-red-500';
+  const label = ok ? '✅ APROBADO' : rev ? '⚠️ REVISAR' : '❌ RECHAZAR';
+  return (
+    <div className={`p-4 rounded-xl border mb-4 ${bg}`}>
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-xs font-bold text-slate-300 uppercase">Score Crediticio</p>
+        <span className={`text-lg font-bold ${txt}`}>{app.credit_score}/100</span>
+      </div>
+      <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
+        <div className={`h-2 rounded-full ${bar}`} style={{ width: `${app.credit_score}%` }} />
+      </div>
+      <div className="space-y-1 text-xs">
+        <div className="flex justify-between"><span className="text-slate-400">Ingresos:</span><span className="text-slate-200 font-mono">$ {Number(app.monthly_income||0).toLocaleString('es-CO')}</span></div>
+        <div className="flex justify-between"><span className="text-slate-400">Gastos:</span><span className="text-slate-200 font-mono">$ {Number(app.monthly_expenses||0).toLocaleString('es-CO')}</span></div>
+        <div className="flex justify-between"><span className="text-slate-400">Otras deudas:</span><span className="text-slate-200 font-mono">$ {Number(app.other_debts||0).toLocaleString('es-CO')}</span></div>
+        <div className="flex justify-between"><span className="text-slate-400">Empleo:</span><span className="text-slate-200 capitalize">{app.employment_type||'--'}</span></div>
+        <div className="flex justify-between border-t border-slate-700 pt-1 mt-1">
+          <span className="text-slate-300 font-semibold">Resultado:</span>
+          <span className={`font-bold ${txt}`}>{label}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
   const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   useEffect(() => {
@@ -647,19 +676,33 @@ const handleEnviarNotificacion = async () => {
             </div>
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-3">
-                {applications.length===0?<div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text -slate-400">No hay solicitudes</div>:(
-                  applications.map(app=>(
-                    <div key={app.id} onClick={()=>setSelectedApp(app)} className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all ${selectedApp?.id===app.id?'border-emerald-500/50':'border-slate-700/50 hover:bg-slate-800/60'}`}>
+                {applications.length===0 ? (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-12 text-center text-slate-400">No hay solicitudes en este estado</div>
+                ) : applications.map(app => {
+                  const sc = app.score_result;
+                  const scoreColor = sc==='APROBADO' ? 'bg-emerald-900 text-emerald-400' : sc==='REVISAR' ? 'bg-amber-900 text-amber-400' : 'bg-red-900 text-red-400';
+                  const scoreIcon = sc==='APROBADO' ? '✅' : sc==='REVISAR' ? '⚠️' : '❌';
+                  return (
+                    <div key={app.id} onClick={()=>setSelectedApp(app)} className={`bg-slate-800/40 rounded-xl p-5 border cursor-pointer transition-all ${selectedApp?.id===app.id?'border-emerald-500/50 shadow-lg shadow-emerald-500/5':'border-slate-700/50 hover:bg-slate-800/60'}`}>
                       <div className="flex items-start justify-between">
-                        <div><h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3><p className="text-xs text-slate-500">{app.email}</p><p className="text-lg font-bold text-emerald-400 mt-2 font-mono">${Number(app.credit_amount).toLocaleString('es-CO')}</p></div>
-                        <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
+                        <div>
+                          <h3 className="font-bold text-slate-200">{app.first_name} {app.last_name}</h3>
+                          <p className="text-xs text-slate-500">{app.email}</p>
+                          <p className="text-lg font-bold text-emerald-400 mt-2 font-mono">${Number(app.credit_amount).toLocaleString('es-CO')}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
+                          {sc && sc!=='PENDIENTE' && (
+                            <div className={`px-2 py-1 rounded text-xs font-bold ${scoreColor}`}>{scoreIcon} {sc} {app.credit_score}/100</div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  ))
-                )}
+                  );
+                })}
               </div>
               <div>
-                {selectedApp?(
+                {selectedApp ? (
                   <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6 sticky top-24">
                     <h2 className="text-lg font-bold text-slate-200 mb-6">Detalles de la Solicitud</h2>
                     <div className="space-y-4 mb-6">
@@ -667,64 +710,34 @@ const handleEnviarNotificacion = async () => {
                       <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
                       <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
                     </div>
+                    {selectedApp.score_result && selectedApp.score_result !== 'PENDIENTE' && (
+                      <ScoreCard app={selectedApp} />
+                    )}
                     {selectedApp.id_front_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl"/></div>}
                     {selectedApp.id_back_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl"/></div>}
                     {selectedApp.selfie_image&&<div className="mb-6"><p className="text-xs text-slate-500 mb-1">Selfie</p><img src={selectedApp.selfie_image} className="w-full rounded-xl"/></div>}
-                    {selectedApp.status==='PENDING'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>updateStatus(selectedApp.id,'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button><button onClick={()=>updateStatus(selectedApp.id,'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button></div>}
-                    {selectedApp.status==='REJECTED'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/>Eliminar Permanentemente</button></div>}
-                    {selectedApp.status==='APPROVED'&&<div className="space-y-3 pt-6 border-t border-slate-700/50"><button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/>Eliminar Solicitud</button></div>}
+                    {selectedApp.status==='PENDING' && (
+                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
+                        <button onClick={()=>updateStatus(selectedApp.id,'APPROVED')} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-sm font-bold">Aprobar</button>
+                        <button onClick={()=>updateStatus(selectedApp.id,'REJECTED')} className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-sm font-bold">Rechazar</button>
+                      </div>
+                    )}
+                    {selectedApp.status==='REJECTED' && (
+                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
+                        <button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2">
+                          <Trash2 size={16}/> Eliminar Permanentemente
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ):<div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>}
+                ) : (
+                  <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
+                )}
               </div>
             </div>
           </>
         )}
-      </div>
-{showNotifModal && notifData.installment && selectedLoan && (
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
-      <h2 className="text-xl font-bold text-white mb-2">💬 Recordatorio WhatsApp</h2>
-      <p className="text-slate-400 text-sm mb-6">
-        Enviar recordatorio a <span className="text-white font-semibold">{selectedLoan.client_name}</span>
-      </p>
-      <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-400">Cuota:</span>
-          <span className="text-slate-200">#{notifData.installment.installment_number}</span>
         </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-400">Vencimiento:</span>
-          <span className="text-slate-200">{notifData.installment.expected_payment_date}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-400">Monto:</span>
-          <span className="text-emerald-400 font-mono font-bold">{formatCurrency(notifData.installment.expected_amount)}</span>
-        </div>
-      </div>
-      <div className="mb-4">
-        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">WhatsApp del cliente</label>
-        <input
-          type="tel"
-          value={notifData.phone}
-          onChange={e => setNotifData(p => ({ ...p, phone: e.target.value }))}
-          placeholder="+573001234567"
-          className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500"
-        />
-        <p className="text-xs text-slate-500 mt-1">Colombia: +57 seguido del número sin el 0 inicial</p>
-      </div>
-      <div className="bg-green-900/20 border border-green-700/30 rounded-xl p-3 mb-6">
-        <p className="text-xs text-green-400 font-semibold mb-1">Vista previa:</p>
-        <p className="text-xs text-slate-300 whitespace-pre-line">{`Hola ${selectedLoan.client_name} 👋\n\nTu cuota con Simbiosis por $${Number(notifData.installment.expected_amount).toLocaleString('es-CO')} vence el ${new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}.\n\nPaga a tiempo y evita intereses de mora.\n\nSimbiosis — conoce, invierte, crece`}</p>
-      </div>
-      <div className="flex gap-3">
-        <button onClick={() => setShowNotifModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
-        <button onClick={handleEnviarNotificacion} disabled={!notifData.phone || sendingNotif} className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">
-          {sendingNotif ? 'Enviando...' : '📤 Enviar WhatsApp'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
       {/* MODAL REVERSIÓN */}
       {showReversalModal&&installmentToRevert&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CreditType, ApplicationFormData } from '../types';
-import { ArrowRight, ArrowLeft } from 'lucide-react';
+import { ArrowRight, ArrowLeft, DollarSign, Briefcase, TrendingUp, User } from 'lucide-react';
 
 interface ApplicationFormProps {
   creditType: CreditType;
@@ -15,7 +15,29 @@ const creditTypeLabels: Record<CreditType, string> = {
   MICROCREDIT: 'Microcredito'
 };
 
+const calcularScore = (data: any): { score: number; result: string; detalle: any } => {
+  const tasa = 0.015;
+  const meses = 12;
+  const cuotaEstimada = data.credit_amount * (tasa * Math.pow(1 + tasa, meses)) / (Math.pow(1 + tasa, meses) - 1);
+  const ingresoDisponible = data.monthly_income - data.monthly_expenses - data.other_debts;
+  const ratio = cuotaEstimada > 0 ? ingresoDisponible / cuotaEstimada : 0;
+
+  let scoreCapacidad = ratio >= 3 ? 100 : ratio >= 2 ? 80 : ratio >= 1.5 ? 60 : ratio >= 1.2 ? 40 : 20;
+  let scoreEstabilidad = data.employment_months >= 24 ? 100 : data.employment_months >= 12 ? 75 : data.employment_months >= 6 ? 50 : 25;
+  let scoreEmpleo = data.employment_type === 'empleado' ? 100 : data.employment_type === 'empresario' ? 80 : 60;
+
+  const scoreTotal = Math.round(scoreCapacidad * 0.6 + scoreEstabilidad * 0.3 + scoreEmpleo * 0.1);
+  const result = scoreTotal >= 70 ? 'APROBADO' : scoreTotal >= 50 ? 'REVISAR' : 'RECHAZAR';
+
+  return {
+    score: scoreTotal,
+    result,
+    detalle: { scoreCapacidad, scoreEstabilidad, scoreEmpleo, cuotaEstimada, ingresoDisponible, ratio }
+  };
+};
+
 export default function ApplicationForm({ creditType, onSubmit, onBack }: ApplicationFormProps) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [formData, setFormData] = useState<ApplicationFormData>({
     credit_type: creditType,
     first_name: '',
@@ -25,198 +47,249 @@ export default function ApplicationForm({ creditType, onSubmit, onBack }: Applic
     id_number: '',
     credit_amount: 0,
     whatsapp_consent: false,
-  });
+    monthly_income: 0,
+    employment_type: '',
+    employment_months: 0,
+    monthly_expenses: 0,
+    other_debts: 0,
+    credit_score: 0,
+    score_result: 'PENDIENTE',
+  } as any);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validateForm = () => {
+  const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.first_name.trim()) newErrors.first_name = 'El nombre es requerido';
     if (!formData.last_name.trim()) newErrors.last_name = 'El apellido es requerido';
     if (!formData.email.trim()) newErrors.email = 'El email es requerido';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Email invalido';
-    if (!formData.id_number.trim()) newErrors.id_number = 'El numero de cedula es requerido';
-    if (formData.credit_amount <= 0) newErrors.credit_amount = 'El monto debe ser mayor a 0';
+    if (!formData.phone.trim()) newErrors.phone = 'El teléfono es requerido';
+    if (!formData.id_number.trim()) newErrors.id_number = 'La cédula es requerida';
+    if (!formData.credit_amount || formData.credit_amount <= 0) newErrors.credit_amount = 'Ingresa un monto válido';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
+  const validateStep2 = () => {
+    const newErrors: Record<string, string> = {};
+    if (!(formData as any).monthly_income || (formData as any).monthly_income <= 0) newErrors.monthly_income = 'Ingresa tus ingresos mensuales';
+    if (!(formData as any).employment_type) newErrors.employment_type = 'Selecciona tu tipo de empleo';
+    if (!(formData as any).employment_months || (formData as any).employment_months <= 0) newErrors.employment_months = 'Ingresa el tiempo en tu trabajo/negocio';
+    if ((formData as any).monthly_expenses === undefined || (formData as any).monthly_expenses < 0) newErrors.monthly_expenses = 'Ingresa tus gastos mensuales';
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep1()) setStep(2);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (validateForm()) {
-      onSubmit(formData);
-    }
+    if (!validateStep2()) return;
+    const { score, result } = calcularScore(formData);
+    onSubmit({ ...formData, credit_score: score, score_result: result } as any);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'credit_amount' ? parseFloat(value) || 0 : value
-    }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
+  const fmt = (val: number) => '$ ' + Math.round(val).toLocaleString('es-CO');
 
-  const handleCheckbox = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, whatsapp_consent: e.target.checked }));
-  };
+  const scorePreview = (formData as any).monthly_income > 0 && (formData as any).employment_type
+    ? calcularScore(formData)
+    : null;
+
+  const inputClass = 'w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 transition-all text-sm';
+  const labelClass = 'block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5';
+  const errorClass = 'text-red-500 text-xs mt-1';
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-28 pb-16">
-      <div className="max-w-2xl mx-auto px-6">
-        <button
-          onClick={onBack}
-          className="mb-8 flex items-center gap-2 text-slate-600 hover:text-navy-700 font-medium transition-colors group"
-        >
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          Volver
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-emerald-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg">
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 md:p-10">
-          <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-navy-900 mb-2">Informacion Personal</h1>
-            <p className="text-slate-600 text-sm">
-              Completa tus datos para solicitar:{' '}
-              <span className="font-semibold text-emerald-600">{creditTypeLabels[creditType]}</span>
-            </p>
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5 mb-4">
+            <span className="text-emerald-600 text-xs font-semibold">{creditTypeLabels[creditType]}</span>
           </div>
+          <h1 className="text-2xl font-bold text-slate-800">Solicitud de Crédito</h1>
+          <p className="text-slate-500 text-sm mt-1">Paso {step} de 2</p>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid md:grid-cols-2 gap-5">
-              <div>
-                <label htmlFor="first_name" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Nombre *
-                </label>
-                <input
-                  type="text"
-                  id="first_name"
-                  name="first_name"
-                  value={formData.first_name}
-                  onChange={handleChange}
-                  className={`input-field ${errors.first_name ? 'input-field-error' : ''}`}
-                  placeholder="Tu nombre"
-                />
-                {errors.first_name && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.first_name}</p>}
+        {/* Progress bar */}
+        <div className="flex gap-2 mb-8">
+          <div className="flex-1 h-1.5 rounded-full bg-emerald-500" />
+          <div className={`flex-1 h-1.5 rounded-full ${step === 2 ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+
+          {/* PASO 1 — INFORMACIÓN PERSONAL */}
+          {step === 1 && (
+            <div>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <User className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Información Personal</h2>
+                  <p className="text-xs text-slate-500">Datos de identificación</p>
+                </div>
               </div>
 
-              <div>
-                <label htmlFor="last_name" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Apellido *
-                </label>
-                <input
-                  type="text"
-                  id="last_name"
-                  name="last_name"
-                  value={formData.last_name}
-                  onChange={handleChange}
-                  className={`input-field ${errors.last_name ? 'input-field-error' : ''}`}
-                  placeholder="Tu apellido"
-                />
-                {errors.last_name && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.last_name}</p>}
-              </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Nombre *</label>
+                    <input type="text" value={formData.first_name} onChange={e => setFormData(p => ({ ...p, first_name: e.target.value }))} className={inputClass} placeholder="Tu nombre" />
+                    {errors.first_name && <p className={errorClass}>{errors.first_name}</p>}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Apellido *</label>
+                    <input type="text" value={formData.last_name} onChange={e => setFormData(p => ({ ...p, last_name: e.target.value }))} className={inputClass} placeholder="Tu apellido" />
+                    {errors.last_name && <p className={errorClass}>{errors.last_name}</p>}
+                  </div>
+                </div>
 
-              <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={`input-field ${errors.email ? 'input-field-error' : ''}`}
-                  placeholder="tu@email.com"
-                />
-                {errors.email && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.email}</p>}
-              </div>
+                <div>
+                  <label className={labelClass}>Email *</label>
+                  <input type="email" value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} className={inputClass} placeholder="tu@email.com" />
+                  {errors.email && <p className={errorClass}>{errors.email}</p>}
+                </div>
 
-              <div>
-                <label htmlFor="phone" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Telefono *
-                </label>
-                <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={`input-field ${errors.phone ? 'input-field-error' : ''}`}
-                  placeholder="+57 300 000 0000"
-                />
-                {errors.phone && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.phone}</p>}
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Teléfono *</label>
+                    <input type="tel" value={formData.phone} onChange={e => setFormData(p => ({ ...p, phone: e.target.value }))} className={inputClass} placeholder="300 000 0000" />
+                    {errors.phone && <p className={errorClass}>{errors.phone}</p>}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Número de Cédula *</label>
+                    <input type="text" value={formData.id_number} onChange={e => setFormData(p => ({ ...p, id_number: e.target.value }))} className={inputClass} placeholder="12345678" />
+                    {errors.id_number && <p className={errorClass}>{errors.id_number}</p>}
+                  </div>
+                </div>
 
-              <div>
-                <label htmlFor="id_number" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Numero de Cedula *
-                </label>
-                <input
-                  type="text"
-                  id="id_number"
-                  name="id_number"
-                  value={formData.id_number}
-                  onChange={handleChange}
-                  className={`input-field ${errors.id_number ? 'input-field-error' : ''}`}
-                  placeholder="1234567890"
-                />
-                {errors.id_number && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.id_number}</p>}
-              </div>
+                <div>
+                  <label className={labelClass}>Monto Solicitado (COP) *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">$</span>
+                    <input type="number" value={formData.credit_amount || ''} onChange={e => setFormData(p => ({ ...p, credit_amount: Number(e.target.value) }))} className={`${inputClass} pl-8`} placeholder="5,000,000" min="0" />
+                  </div>
+                  {errors.credit_amount && <p className={errorClass}>{errors.credit_amount}</p>}
+                </div>
 
-              <div>
-                <label htmlFor="credit_amount" className="block text-sm font-semibold text-navy-800 mb-2">
-                  Monto Solicitado (COP) *
+                <label className="flex items-start gap-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl cursor-pointer">
+                  <input type="checkbox" checked={(formData as any).whatsapp_consent} onChange={e => setFormData(p => ({ ...p, whatsapp_consent: e.target.checked }))} className="mt-0.5 h-4 w-4 text-emerald-500" />
+                  <span className="text-xs text-slate-600">Autorizo a <strong>Simbiosis</strong> a enviarme recordatorios de pago y notificaciones por WhatsApp.</span>
                 </label>
-                <input
-                  type="number"
-                  id="credit_amount"
-                  name="credit_amount"
-                  value={formData.credit_amount || ''}
-                  onChange={handleChange}
-                  className={`input-field ${errors.credit_amount ? 'input-field-error' : ''}`}
-                  placeholder="1000000"
-                />
-                {errors.credit_amount && <p className="text-red-600 text-xs mt-1.5 font-medium">{errors.credit_amount}</p>}
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={onBack} className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium text-sm transition-colors flex items-center justify-center gap-2">
+                    <ArrowLeft className="w-4 h-4" /> Atrás
+                  </button>
+                  <button type="button" onClick={handleNext} className="flex-1 px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                    Siguiente <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Autorización WhatsApp */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.whatsapp_consent}
-                  onChange={handleCheckbox}
-                  className="mt-0.5 h-4 w-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                />
-                <span className="text-sm text-slate-700 leading-relaxed">
-                  Autorizo a{' '}
-                  <span className="font-semibold text-emerald-700">Simbiosis</span>{' '}
-                  a enviarme recordatorios de pago y comunicaciones sobre mi crédito por{' '}
-                  <span className="font-semibold">WhatsApp</span> al número registrado en esta solicitud.
-                </span>
-              </label>
-            </div>
+          {/* PASO 2 — INFORMACIÓN FINANCIERA */}
+          {step === 2 && (
+            <form onSubmit={handleSubmit}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Información Financiera</h2>
+                  <p className="text-xs text-slate-500">Nos ayuda a evaluar tu solicitud</p>
+                </div>
+              </div>
 
-            <div className="flex gap-4 pt-2">
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex-1 btn-secondary"
-              >
-                Atras
-              </button>
-              <button
-                type="submit"
-                className="flex-1 btn-primary inline-flex items-center justify-center gap-2"
-              >
-                Continuar
-                <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-          </form>
+              <div className="space-y-4">
+                <div>
+                  <label className={labelClass}>Tipo de Empleo / Actividad *</label>
+                  <select value={(formData as any).employment_type} onChange={e => setFormData(p => ({ ...p, employment_type: e.target.value } as any))} className={inputClass}>
+                    <option value="">Selecciona una opción</option>
+                    <option value="empleado">Empleado (contrato laboral)</option>
+                    <option value="independiente">Trabajador Independiente</option>
+                    <option value="empresario">Empresario / Dueño de negocio</option>
+                  </select>
+                  {errors.employment_type && <p className={errorClass}>{errors.employment_type}</p>}
+                </div>
+
+                <div>
+                  <label className={labelClass}>Tiempo en tu trabajo o negocio actual *</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'Menos de 6 meses', value: 3 },
+                      { label: '6 a 12 meses', value: 9 },
+                      { label: '1 a 2 años', value: 18 },
+                      { label: 'Más de 2 años', value: 30 },
+                    ].map(opt => (
+                      <label key={opt.value} className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${(formData as any).employment_months === opt.value ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                        <input type="radio" name="employment_months" value={opt.value} checked={(formData as any).employment_months === opt.value} onChange={() => setFormData(p => ({ ...p, employment_months: opt.value } as any))} className="text-emerald-500" />
+                        <span className="text-xs text-slate-700">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.employment_months && <p className={errorClass}>{errors.employment_months}</p>}
+                </div>
+
+                <div>
+                  <label className={labelClass}>Ingresos Mensuales (COP) *</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                    <input type="number" value={(formData as any).monthly_income || ''} onChange={e => setFormData(p => ({ ...p, monthly_income: Number(e.target.value) } as any))} className={`${inputClass} pl-8`} placeholder="3,000,000" min="0" />
+                  </div>
+                  {errors.monthly_income && <p className={errorClass}>{errors.monthly_income}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Gastos Mensuales *</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                      <input type="number" value={(formData as any).monthly_expenses || ''} onChange={e => setFormData(p => ({ ...p, monthly_expenses: Number(e.target.value) } as any))} className={`${inputClass} pl-8`} placeholder="1,500,000" min="0" />
+                    </div>
+                    {errors.monthly_expenses && <p className={errorClass}>{errors.monthly_expenses}</p>}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Otras Deudas Mensuales</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                      <input type="number" value={(formData as any).other_debts || ''} onChange={e => setFormData(p => ({ ...p, other_debts: Number(e.target.value) } as any))} className={`${inputClass} pl-8`} placeholder="0" min="0" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score preview en tiempo real */}
+                {scorePreview && (
+                  <div className={`rounded-xl p-4 border ${scorePreview.result === 'APROBADO' ? 'bg-emerald-50 border-emerald-200' : scorePreview.result === 'REVISAR' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-slate-600 uppercase">Indicador de elegibilidad</span>
+                      <span className={`text-sm font-bold ${scorePreview.result === 'APROBADO' ? 'text-emerald-600' : scorePreview.result === 'REVISAR' ? 'text-amber-600' : 'text-red-600'}`}>
+                        {scorePreview.result === 'APROBADO' ? '✅ Perfil favorable' : scorePreview.result === 'REVISAR' ? '⚠️ Requiere revisión' : '❌ Perfil de riesgo alto'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Cuota estimada: <strong>{fmt(scorePreview.detalle.cuotaEstimada)}/mes</strong> · Ingreso disponible: <strong>{fmt(scorePreview.detalle.ingresoDisponible)}</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-6">
+                <button type="button" onClick={() => setStep(1)} className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-medium text-sm transition-colors flex items-center justify-center gap-2">
+                  <ArrowLeft className="w-4 h-4" /> Atrás
+                </button>
+                <button type="submit" className="flex-1 px-4 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+                  Enviar Solicitud <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

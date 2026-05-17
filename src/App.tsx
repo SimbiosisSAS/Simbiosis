@@ -107,21 +107,28 @@ function App() {
       ]);
 
       const { error: dbError } = await directSupabase
-        .from('credit_applications')
-        .insert({
-          credit_type: formData.credit_type,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
-          phone: formData.phone,
-          id_number: formData.id_number,
-          credit_amount: formData.credit_amount,
-          whatsapp_consent: formData.whatsapp_consent || false,
-          id_front_image: idFrontUrl,
-          id_back_image: idBackUrl,
-          selfie_image: selfieUrl,
-          status: 'PENDING',
-        });
+  .from('credit_applications')
+  .insert({
+    credit_type: formData.credit_type,
+    first_name: formData.first_name,
+    last_name: formData.last_name,
+    email: formData.email,
+    phone: formData.phone,
+    id_number: formData.id_number,
+    credit_amount: formData.credit_amount,
+    whatsapp_consent: formData.whatsapp_consent || false,
+    id_front_image: idFrontUrl,
+    id_back_image: idBackUrl,
+    selfie_image: selfieUrl,
+    status: 'PENDING',
+    monthly_income: (formData as any).monthly_income || 0,
+    employment_type: (formData as any).employment_type || '',
+    employment_months: (formData as any).employment_months || 0,
+    monthly_expenses: (formData as any).monthly_expenses || 0,
+    other_debts: (formData as any).other_debts || 0,
+    credit_score: (formData as any).credit_score || 0,
+    score_result: (formData as any).score_result || 'PENDIENTE',
+  });
 
       if (dbError) throw dbError;
       setCurrentStep('success');
