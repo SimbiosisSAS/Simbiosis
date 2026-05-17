@@ -5,6 +5,7 @@ import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calend
 import LoanOriginationEngine from './LoanOriginationEngine';
 import IndicadoresCartera from './IndicadoresCartera';
 import ReporteCarteraPDF from './ReporteCarteraPDF';
+import ReporteProvisionesPDF from './ReporteProvisionesPDF';
 
 type AdminTab = 'solicitudes' | 'cartera' | 'simulador' | 'configuracion';
 
@@ -573,7 +574,10 @@ const handleEnviarNotificacion = async () => {
           <div className="space-y-6">
             <div className="flex items-center justify-between w-full">
   <div className="flex gap-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1 w-fit">
+  <div className="flex items-center gap-2">
+  <ReporteProvisionesPDF />
   <ReporteCarteraPDF />
+</div>
 </div>
               <button onClick={()=>setCarteraView('creditos')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='creditos'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><Wallet className="w-4 h-4"/>Créditos</button>
               <button onClick={()=>{setCarteraView('indicadores');setSelectedLoan(null);}} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='indicadores'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><TrendingUp className="w-4 h-4"/>Indicadores</button>
