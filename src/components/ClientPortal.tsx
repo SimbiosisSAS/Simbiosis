@@ -41,43 +41,97 @@ export default function ClientPortal() {
   };
 
   const handleSendOtp = async () => {
-    if (!cedula.trim()) { setError('Ingresa tu número de cédula'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await fetch('/api/client-portal-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', cedula: cedula.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      setClientName(data.clientName);
-      setPhoneMasked(data.phoneMasked);
-      setStep('otp');
-    } catch { setError('Error de conexión. Intenta de nuevo.'); }
-    finally { setLoading(false); }
-  };
+  if (!cedula.trim()) { setError('Ingresa tu número de cédula'); return; }
+  setLoading(true); setError('');
+  try {
+    // 1. Buscar crédito con Supabase JS (esto sí funciona)
+    const { data: loans } = await supabase
+      .from('active_loans')
+      .select('id, client_name, client_phone')
+      .eq('client_id_number', cedula.trim());
 
-  const handleVerifyOtp = async () => {
-    if (!otp.trim()) { setError('Ingresa el código'); return; }
-    setLoading(true); setError('');
-    try {
-      const res = await fetch('/api/client-portal-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verify', cedula: cedula.trim(), otp: otp.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error); return; }
-      const s: Session = { loanId: data.loanId, clientName: data.clientName, cedula: cedula.trim() };
-      setSession(s);
-      localStorage.setItem('simbiosis_portal_session', JSON.stringify(s));
-      await loadLoanData(data.loanId);
-      setStep('dashboard');
-    } catch { setError('Error de conexión. Intenta de nuevo.'); }
-    finally { setLoading(false); }
-  };
+    if (!loans || loans.length === 0) {
+      setError('No encontramos ningún crédito con esa cédula.');
+      return;
+    }
 
+    // 2. Obtener teléfono
+    let phone = loans[0].client_phone || '';
+    if (!phone) {
+      const { data: apps } = await supabase
+        .from('credit_applications')
+        .select('phone')
+        .eq('id_number', cedula.trim())
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (apps && apps.length > 0) phone = apps[0].phone || '';
+    }
+
+    if (!phone) {
+      setError('No encontramos teléfono registrado para este cliente. Contacta a Simbiosis.');
+      return;
+    }
+
+    // 3. Llamar API solo para generar OTP y enviar WhatsApp
+    const res = await fetch('/api/client-portal-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cedula: cedula.trim(),
+        phone,
+        clientName: loans[0].client_name,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError(data.error || 'Error enviando código'); return; }
+
+    setClientName(loans[0].client_name);
+    setPhoneMasked(data.phoneMasked);
+    setStep('otp');
+  } catch { setError('Error de conexión. Intenta de nuevo.'); }
+  finally { setLoading(false); }
+};
+
+const handleVerifyOtp = async () => {
+  if (!otp.trim()) { setError('Ingresa el código'); return; }
+  setLoading(true); setError('');
+  try {
+    const now = new Date().toISOString();
+    const { data: otps } = await supabase
+      .from('portal_otps')
+      .select('id')
+      .eq('cedula', cedula.trim())
+      .eq('otp', otp.trim())
+      .eq('used', false)
+      .gt('expires_at', now)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (!otps || otps.length === 0) {
+      setError('Código incorrecto o expirado. Solicita uno nuevo.');
+      return;
+    }
+
+    await supabase.from('portal_otps').update({ used: true }).eq('id', otps[0].id);
+
+    const { data: loans } = await supabase
+      .from('active_loans')
+      .select('id, client_name')
+      .eq('client_id_number', cedula.trim())
+      .limit(1);
+
+    const s: Session = {
+      loanId: loans![0].id,
+      clientName: loans![0].client_name,
+      cedula: cedula.trim(),
+    };
+    setSession(s);
+    localStorage.setItem('simbiosis_portal_session', JSON.stringify(s));
+    await loadLoanData(s.loanId);
+    setStep('dashboard');
+  } catch { setError('Error de conexión. Intenta de nuevo.'); }
+  finally { setLoading(false); }
+};
   const handleLogout = () => {
     localStorage.removeItem('simbiosis_portal_session');
     setSession(null); setLoan(null); setInstallments([]);
