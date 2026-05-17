@@ -114,8 +114,8 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   useEffect(() => {
     fetchUsuryRates();
     if (activeTab === 'solicitudes') fetchApplications();
-    else if (activeTab === 'cartera') { fetchActiveLoans(); setSelectedLoan(null); }
-  }, [filterStatus, activeTab]);
+    else if (activeTab === 'cartera') { fetchActiveLoans(showLiquidados); setSelectedLoan(null); }
+  }, [filterStatus, activeTab, showLiquidados]);
 
   const fetchApplications = async () => {
     setLoading(true);
@@ -597,7 +597,15 @@ const handleEnviarNotificacion = async () => {
   <div className="flex gap-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1 w-fit">
   <div className="flex items-center gap-2">
   <ReporteProvisionesPDF />
+  <div className="flex items-center gap-2">
+  <button
+  onClick={() => setShowLiquidados(!showLiquidados)}
+  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${showLiquidados ? 'bg-slate-500 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+>
+    📁 {showLiquidados ? 'Ocultar Liquidados' : 'Ver Liquidados'}
+  </button>
   <ReporteCarteraPDF />
+</div>
 </div>
 </div>
               <button onClick={()=>setCarteraView('creditos')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='creditos'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><Wallet className="w-4 h-4"/>Créditos</button>
