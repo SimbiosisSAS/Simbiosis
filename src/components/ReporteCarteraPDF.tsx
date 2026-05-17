@@ -32,7 +32,7 @@ export default function ReporteCarteraPDF() {
 
     try {
       const [loansRes, instRes] = await Promise.all([
-        supabase.from('active_loans').select('*'),
+        supabase.from('active_loans').select('*').neq('status', 'LIQUIDADO'),
         supabase.from('loan_installments').select('*'),
       ]);
 
