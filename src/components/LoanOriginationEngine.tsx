@@ -10,6 +10,7 @@ interface AmortizationRow {
   openingBalance: number;
   principal: number;
   interest: number;
+  insurancePortion: number;
   paymentAmount: number;
   closingBalance: number;
 }
@@ -22,6 +23,7 @@ interface LoanParams {
   originationCosts: number;
   disbursementDate: string;
   firstPaymentDate: string;
+  monthlyInsurance: number;
   nominalRateMV: number;
   termMonths: number;
 }
