@@ -30,6 +30,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   });
   const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos');
   const [historialCliente, setHistorialCliente] = useState<any[]>([]);
+  const [showLiquidados, setShowLiquidados] = useState(false);
   const [showReversalModal, setShowReversalModal] = useState(false);
   const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
@@ -125,13 +126,11 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
     setLoading(false);
   };
 
-  const fetchActiveLoans = async () => {
+  const fetchActiveLoans = async (includeLiquidados = false) => {
   setLoading(true);
-  const { data, error } = await supabase
-    .from('active_loans')
-    .select('*')
-    .neq('status', 'LIQUIDADO')
-    .order('created_at', { ascending: false });
+  let query = supabase.from('active_loans').select('*').order('created_at', { ascending: false });
+  if (!includeLiquidados) query = query.neq('status', 'LIQUIDADO');
+  const { data, error } = await query;
   if (!error) setActiveLoans(data || []);
   setLoading(false);
 };

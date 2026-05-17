@@ -32,7 +32,7 @@ export default function ReporteCarteraPDF() {
 
     try {
       const [loansRes, instRes] = await Promise.all([
-        supabase.from('active_loans').select('*').neq('status', 'LIQUIDADO'),
+        supabase.from('active_loans').select('*'),
         supabase.from('loan_installments').select('*'),
       ]);
 
@@ -146,7 +146,39 @@ export default function ReporteCarteraPDF() {
             <td style="padding:8px 6px;text-align:center;color:${estadoColor};font-weight:bold;">${estadoLabel}</td>
           </tr>`;
       }).join('');
+// Historial completo de todos los créditos
+const historialLoans = loans; // todos incluyendo liquidados
 
+const filasHistorial = historialLoans.map(loan => {
+  const loanInst = installments.filter(i => i.loan_id === loan.id);
+  const pagosTotales = loanInst.filter(i => i.status === 'PAID' || i.status === 'LATE');
+  const totalPagado = pagosTotales.reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
+  const interesesCobrados = pagosTotales.reduce((s, i) => s + Number(i.interest_portion), 0);
+  const morasCobradas = pagosTotales.reduce((s, i) => s + Number(i.late_fee_charged || 0), 0);
+  const capitalOriginal = Number(loan.principal_amount || loan.loan_amount);
+  const saldo = getLoanBalance(loan.id);
+  const estado = loan.status === 'LIQUIDADO' ? 'Liquidado' : saldo > 0 ? 'Activo' : 'Al día';
+  const estadoColor = loan.status === 'LIQUIDADO' ? '#6b7280' : saldo > 0 ? '#059669' : '#059669';
+
+  return `
+    <tr style="border-bottom:1px solid #e5e7eb;">
+      <td style="padding:8px 6px;font-weight:bold;">${loan.client_name}</td>
+      <td style="padding:8px 6px;text-align:right;">$ ${Math.round(capitalOriginal).toLocaleString('es-CO')}</td>
+      <td style="padding:8px 6px;text-align:right;font-weight:bold;color:#059669;">$ ${Math.round(totalPagado).toLocaleString('es-CO')}</td>
+      <td style="padding:8px 6px;text-align:right;color:#d97706;">$ ${Math.round(interesesCobrados).toLocaleString('es-CO')}</td>
+      <td style="padding:8px 6px;text-align:right;color:#dc2626;">$ ${Math.round(morasCobradas).toLocaleString('es-CO')}</td>
+      <td style="padding:8px 6px;text-align:right;font-weight:bold;">$ ${Math.round(saldo).toLocaleString('es-CO')}</td>
+      <td style="padding:8px 6px;text-align:center;color:${estadoColor};font-weight:bold;">${estado}</td>
+    </tr>`;
+}).join('');
+
+const grandTotalPrestado = historialLoans.reduce((s, l) => s + Number(l.principal_amount || l.loan_amount), 0);
+const grandTotalPagado = installments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.actual_amount_paid || 0), 0);
+const grandTotalIntereses = installments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.interest_portion), 0);
+const grandTotalMoras = installments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.late_fee_charged || 0), 0);
+const grandTotalPendiente = historialLoans.reduce((s, l) => s + getLoanBalance(l.id), 0);
+const retornoGrand = grandTotalIntereses + grandTotalMoras;
+const pctRetorno = grandTotalPrestado > 0 ? ((retornoGrand / grandTotalPrestado) * 100).toFixed(2) : '0';
       // ── HTML DEL REPORTE ──────────────────────────────────────────────────
       const html = `<!DOCTYPE html>
 <html lang="es">
@@ -258,7 +290,7 @@ export default function ReporteCarteraPDF() {
     </div>
     <div class="kpi">
       <div class="kpi-label">Retorno Total Recibido</div>
-      <div class="kpi-value green">$ ${Math.round(retornoTotal).toLocaleString('es-CO')}</div>
+      <div class="kpi-value green">$ ${Math.round(retornoGrand).toLocaleString('es-CO')}</div>
     </div>
     <div class="kpi" style="background:#f0fdf4;border-color:#bbf7d0;">
       <div class="kpi-label">TEA Estimada</div>
@@ -366,7 +398,69 @@ export default function ReporteCarteraPDF() {
 
   <div class="footer">Simbiosis Loan Management System — Reporte generado el ${fechaCorte}</div>
 </div>
+<!-- HISTORIAL COMPLETO -->
+<div style="padding:40px 48px;">
+  <h2 style="font-size:18px;font-weight:bold;color:#111827;border-bottom:2px solid #e5e7eb;padding-bottom:8px;margin-bottom:20px;">
+    5. Historial Completo de Créditos
+  </h2>
 
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">Total Capital Prestado</div>
+      <div style="font-size:18px;font-weight:bold;">$ ${Math.round(grandTotalPrestado).toLocaleString('es-CO')}</div>
+      <div style="font-size:10px;color:#6b7280;margin-top:2px;">${historialLoans.length} créditos en total</div>
+    </div>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">Total Recaudado</div>
+      <div style="font-size:18px;font-weight:bold;color:#059669;">$ ${Math.round(grandTotalPagado).toLocaleString('es-CO')}</div>
+    </div>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#065f46;margin-bottom:4px;">Retorno Total (Intereses + Moras)</div>
+      <div style="font-size:18px;font-weight:bold;color:#059669;">$ ${Math.round(retornoTotal).toLocaleString('es-CO')}</div>
+      <div style="font-size:10px;color:#6b7280;margin-top:2px;">${pctRetorno}% sobre el capital prestado</div>
+    </div>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">Intereses Cobrados</div>
+      <div style="font-size:18px;font-weight:bold;color:#d97706;">$ ${Math.round(grandTotalIntereses).toLocaleString('es-CO')}</div>
+    </div>
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px;">Moras Cobradas</div>
+      <div style="font-size:18px;font-weight:bold;color:#dc2626;">$ ${Math.round(grandTotalMoras).toLocaleString('es-CO')}</div>
+    </div>
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px;">
+      <div style="font-size:10px;text-transform:uppercase;color:#c2410c;margin-bottom:4px;">Capital Pendiente por Recuperar</div>
+      <div style="font-size:18px;font-weight:bold;color:#c2410c;">$ ${Math.round(grandTotalPendiente).toLocaleString('es-CO')}</div>
+    </div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <thead style="background:#111827;color:white;">
+      <tr>
+        <th style="padding:10px 6px;text-align:left;">Cliente</th>
+        <th style="padding:10px 6px;text-align:right;">Capital Prestado</th>
+        <th style="padding:10px 6px;text-align:right;">Total Pagado</th>
+        <th style="padding:10px 6px;text-align:right;">Intereses</th>
+        <th style="padding:10px 6px;text-align:right;">Moras</th>
+        <th style="padding:10px 6px;text-align:right;">Saldo Pendiente</th>
+        <th style="padding:10px 6px;text-align:center;">Estado</th>
+      </tr>
+    </thead>
+    <tbody>${filasHistorial}</tbody>
+    <tr style="background:#111827;color:white;font-weight:bold;">
+      <td style="padding:10px 6px;">TOTALES</td>
+      <td style="padding:10px 6px;text-align:right;">$ ${Math.round(grandTotalPrestado).toLocaleString('es-CO')}</td>
+      <td style="padding:10px 6px;text-align:right;">$ ${Math.round(grandTotalPagado).toLocaleString('es-CO')}</td>
+      <td style="padding:10px 6px;text-align:right;">$ ${Math.round(grandTotalIntereses).toLocaleString('es-CO')}</td>
+      <td style="padding:10px 6px;text-align:right;">$ ${Math.round(grandTotalMoras).toLocaleString('es-CO')}</td>
+      <td style="padding:10px 6px;text-align:right;">$ ${Math.round(grandTotalPendiente).toLocaleString('es-CO')}</td>
+      <td style="padding:10px 6px;text-align:center;">—</td>
+    </tr>
+  </table>
+
+  <p style="margin-top:24px;font-size:10px;color:#9ca3af;text-align:center;">
+    Simbiosis Loan Management System — Reporte generado el ${fechaCorte}
+  </p>
+</div>
 </body>
 </html>`;
 
