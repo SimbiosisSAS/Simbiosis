@@ -126,11 +126,15 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   };
 
   const fetchActiveLoans = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('active_loans').select('*').order('created_at', { ascending: false });
-    if (!error) setActiveLoans(data || []);
-    setLoading(false);
-  };
+  setLoading(true);
+  const { data, error } = await supabase
+    .from('active_loans')
+    .select('*')
+    .neq('status', 'LIQUIDADO')
+    .order('created_at', { ascending: false });
+  if (!error) setActiveLoans(data || []);
+  setLoading(false);
+};
 
   const fetchInstallments = async (loanId: string) => {
     setLoading(true);
@@ -175,7 +179,24 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
       alert('Crédito eliminado'); setSelectedLoan(null); fetchActiveLoans();
     } catch (err: any) { alert('Error: ' + err.message); }
   };
-
+const handleLiquidarCredito = async () => {
+  if (!selectedLoan) return;
+  const saldo = calculateCurrentBalance();
+  if (saldo > 0) {
+    alert(`Este crédito aún tiene un saldo de ${formatCurrency(saldo)}. Solo se puede liquidar cuando el saldo es $0.`);
+    return;
+  }
+  if (!window.confirm(`¿Marcar el crédito de ${selectedLoan.client_name} como LIQUIDADO? Quedará archivado y no aparecerá en la cartera activa.`)) return;
+  try {
+    const { error } = await supabase.from('active_loans').update({ status: 'LIQUIDADO' }).eq('id', selectedLoan.id);
+    if (error) throw error;
+    alert('Crédito marcado como liquidado y archivado.');
+    setSelectedLoan(null);
+    fetchActiveLoans();
+  } catch (err: any) {
+    alert('Error: ' + err.message);
+  }
+};
   const updateStatus = async (appId: string, newStatus: string) => {
     try {
       const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
@@ -606,19 +627,21 @@ const handleEnviarNotificacion = async () => {
                 </div>
 
                 {selectedLoan && (
-                  <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
-                    <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
-                      <div><h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2><p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p></div>
-                      <div className="flex gap-2 flex-wrap">
-                        <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
-                        <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
-                        <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
-                        <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>
-                        <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1"><Trash2 size={14}/>Eliminar</button>
-                        <button onClick={()=>setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">Cerrar</button>
-                      </div>
-                    </div>
-
+  <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
+    <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
+      <div><h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2><p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p></div>
+      <div className="flex gap-2 flex-wrap">
+        <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
+        <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
+        <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
+        <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>
+        {calculateCurrentBalance() === 0 && (
+          <button onClick={handleLiquidarCredito} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600 rounded-lg text-sm border border-slate-600 transition-colors flex items-center gap-1">✓ Liquidar</button>
+        )}
+        <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1"><Trash2 size={14}/>Eliminar</button>
+        <button onClick={()=>setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">Cerrar</button>
+      </div>
+    </div>
                     <div className="grid grid-cols-3 gap-4 mb-6">
                       <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30"><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p><p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.principal_amount||selectedLoan.loan_amount)}</p></div>
                       <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p><p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(calculateCurrentBalance())}</p></div>

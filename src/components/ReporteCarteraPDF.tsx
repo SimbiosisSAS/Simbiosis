@@ -114,7 +114,9 @@ export default function ReporteCarteraPDF() {
       const filasAging = agingBuckets.map(b => {
         const inBucket = loanDays.filter(({ maxDays }) => b.max === 0 ? maxDays === 0 : maxDays >= b.min && maxDays <= b.max);
         const saldo = inBucket.reduce((s, { balance }) => s + balance, 0);
-        const totalCartera = loanDays.reduce((s, { balance }) => s + balance, 0);
+        const totalCartera = loans
+  .filter(l => getLoanBalance(l.id) > 0)  // solo créditos con saldo pendiente
+  .reduce((s, l) => s + getLoanBalance(l.id), 0);
         return `
           <tr style="border-bottom:1px solid #e5e7eb;">
             <td style="padding:10px 8px;font-weight:bold;color:${b.color};">${b.label}</td>
@@ -132,7 +134,7 @@ export default function ReporteCarteraPDF() {
         const saldo = getLoanBalance(loan.id);
         const maxDays = loanDays.find(l => l.loan.id === loan.id)?.maxDays || 0;
         const estadoColor = maxDays === 0 ? '#059669' : maxDays <= 30 ? '#d97706' : '#dc2626';
-        const estadoLabel = maxDays === 0 ? 'Al día' : `${maxDays} días mora`;
+        const estadoLabel = getLoanBalance(loan.id) === 0 ? 'Liquidado' : maxDays === 0 ? 'Al día' : `${maxDays} días mora`;
         return `
           <tr style="border-bottom:1px solid #e5e7eb;">
             <td style="padding:8px 6px;font-weight:bold;">${loan.client_name}</td>
