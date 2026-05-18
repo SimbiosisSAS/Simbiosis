@@ -276,13 +276,12 @@ const handleLiquidarCredito = async () => {
         let principal = Math.round(newFixedQuota) - interest;
         if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
         if (principal < 0) principal = 0;
-        updates.push({ id: inst.id, expected_amount: principal + interest + Number(selectedLoan.monthly_insurance||0), principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING' });
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
         currentBalance = Math.round(currentBalance - principal);
       }
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
       if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
-      const insurance = Number(selectedLoan.monthly_insurance || 0);
       let done = false;
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
@@ -291,12 +290,12 @@ const handleLiquidarCredito = async () => {
         let principal = fixedQuota - interest;
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
-          updates.push({ id: inst.id, expected_amount: principal + interest + Number(selectedLoan.monthly_insurance||0), principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING' });
+          updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
           currentBalance = 0; done = true; continue;
         }
         principal = Math.round(principal);
         currentBalance = Math.round(currentBalance - principal);
-        updates.push({ id: inst.id, expected_amount: principal + interest + Number(selectedLoan.monthly_insurance||0), principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING' });
+        updates.push({ id: inst.id, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
       }
     }
     for (const u of updates) {
@@ -327,11 +326,11 @@ const handleLiquidarCredito = async () => {
       let principal = fixedQuota - interest;
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' }).eq('id', inst.id);
+        await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
         currentBalance = 0; lastDate = new Date(inst.expected_payment_date); nextInstNumber = inst.installment_number + 1; continue;
       }
       principal = Math.round(principal);
-      await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' }).eq('id', inst.id);
+      await supabase.from('loan_installments').update({ expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
       currentBalance = Math.round(currentBalance - principal);
       lastDate = new Date(inst.expected_payment_date); nextInstNumber = inst.installment_number + 1;
     }
@@ -342,10 +341,11 @@ const handleLiquidarCredito = async () => {
       let principal = fixedQuota - interest;
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + Number(selectedLoan.monthly_insurance||0), principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = 0; break;
+      }
       principal = Math.round(principal);
-      await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0, insurance_portion: insurance });
+      await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
       currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
     }
     alert('¡Plan recalculado correctamente!');
@@ -353,43 +353,23 @@ const handleLiquidarCredito = async () => {
   };
 
   const calculatePazYSalvo = () => {
-  if (!selectedLoan || loanInstallments.length === 0) return;
-  const rate = getLoanRate(selectedLoan, loanInstallments);
-  const saldoActual = calculateCurrentBalance();
-  const pagadas = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').sort((a, b) => b.installment_number - a.installment_number);
-  const ultimaFecha = pagadas.length > 0 ? new Date(pagadas[0].actual_payment_date || pagadas[0].expected_payment_date) : new Date(selectedLoan.disbursement_date);
-  const hoy = new Date(); hoy.setHours(0,0,0,0); ultimaFecha.setHours(0,0,0,0);
-  const diasTranscurridos = Math.max(0, Math.floor((hoy.getTime() - ultimaFecha.getTime()) / 86400000));
-  const interesCorrido = diasTranscurridos > 0 ? Math.round(saldoActual * (Math.pow(1 + rate, diasTranscurridos / 30) - 1)) : 0;
-  const hoyStr = hoy.toISOString().split('T')[0];
-  const morasPendientes = loanInstallments.filter(i => i.status === 'PENDING').reduce((sum, i) => {
-    const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
-    if (f < hoy) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return sum + m.penalty; }
-    return sum;
-  }, 0);
-  const insurance = Number(selectedLoan.monthly_insurance || 0);
-  let seguroPazYSalvo = 0;
-  if (insurance > 0) {
-    const proximaCuota = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number)[0];
-    if (proximaCuota) {
-      const fechaVenc = new Date(proximaCuota.expected_payment_date);
-      fechaVenc.setHours(0, 0, 0, 0);
-      if (hoy >= fechaVenc) seguroPazYSalvo = insurance;
-    }
-  }
-  setPazYSalvoData({
-    saldoActual,
-    diasTranscurridos,
-    interesCorrido,
-    morasPendientes,
-    seguroPazYSalvo,
-    totalAPagar: saldoActual + interesCorrido + morasPendientes + seguroPazYSalvo,
-    tienePagos: pagadas.length > 0,
-    fechaCalculo: hoy.toLocaleDateString('es-CO'),
-    ultimaFecha: ultimaFecha.toLocaleDateString('es-CO'),
-  });
-  setShowPazYSalvoModal(true);
-};
+    if (!selectedLoan || loanInstallments.length === 0) return;
+    const rate = getLoanRate(selectedLoan, loanInstallments);
+    const saldoActual = calculateCurrentBalance();
+    const pagadas = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').sort((a, b) => b.installment_number - a.installment_number);
+    const ultimaFecha = pagadas.length > 0 ? new Date(pagadas[0].actual_payment_date || pagadas[0].expected_payment_date) : new Date(selectedLoan.disbursement_date);
+    const hoy = new Date(); hoy.setHours(0,0,0,0); ultimaFecha.setHours(0,0,0,0);
+    const diasTranscurridos = Math.max(0, Math.floor((hoy.getTime() - ultimaFecha.getTime()) / 86400000));
+    const interesCorrido = diasTranscurridos > 0 ? Math.round(saldoActual * (Math.pow(1 + rate, diasTranscurridos / 30) - 1)) : 0;
+    const hoyStr = hoy.toISOString().split('T')[0];
+    const morasPendientes = loanInstallments.filter(i => i.status === 'PENDING').reduce((sum, i) => {
+      const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
+      if (f < hoy) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return sum + m.penalty; }
+      return sum;
+    }, 0);
+    setPazYSalvoData({ saldoActual, diasTranscurridos, interesCorrido, morasPendientes, totalAPagar: saldoActual + interesCorrido + morasPendientes, tienePagos: pagadas.length > 0, fechaCalculo: hoy.toLocaleDateString('es-CO'), ultimaFecha: ultimaFecha.toLocaleDateString('es-CO') });
+    setShowPazYSalvoModal(true);
+  };
 
   const generarEstadoCuenta = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
@@ -485,14 +465,10 @@ const handleEnviarNotificacion = async () => {
       if (restructuringParams.capitalizarMora) {
         const hoyStr = new Date().toISOString().split('T')[0];
         const moraAcumulada = loanInstallments.reduce((s, i) => {
-  if (i.status === 'PENDING') {
-    const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0);
-    const h = new Date(); h.setHours(0,0,0,0);
-    if (f < h) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return s + m.penalty; }
-  }
-  return s + Number(i.late_fee_charged || 0);
-}, 0);
-nuevoSaldo += moraAcumulada;
+          if (i.status === 'PENDING') { const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0); const h = new Date(); h.setHours(0,0,0,0); if (f < h) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return s + m.penalty; } }
+          return s + Number(i.late_fee_charged || 0);
+        }, 0);
+        nuevoSaldo += moraAcumulada;
       }
       const nuevaCuota = Math.round(nuevoSaldo * (nuevaTasa * Math.pow(1 + nuevaTasa, nuevosPlazo)) / (Math.pow(1 + nuevaTasa, nuevosPlazo) - 1));
       const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
@@ -507,7 +483,7 @@ nuevoSaldo += moraAcumulada;
         let principal = nuevaCuota - interest;
         if (principal >= currentBalance || i === nuevosPlazo - 1) principal = Math.round(currentBalance);
         principal = Math.round(principal);
-        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: lastDate.toISOString().split('T')[0], expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, insurance_portion: Number(selectedLoan.monthly_insurance||0), status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0, insurance_portion: insurance });
+        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: lastDate.toISOString().split('T')[0], expected_amount: principal + interest, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
       }
       await supabase.from('active_loans').update({ interest_rate_monthly: restructuringParams.nuevaTasa, fixed_quota_amount: nuevaCuota, installments: nuevosPlazo }).eq('id', selectedLoan.id);
@@ -530,7 +506,7 @@ nuevoSaldo += moraAcumulada;
       if (abonoCapitalExtra > 0) {
         nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + abonoCapitalExtra;
       } else {
-        const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - Number(selectedInstallment.insurance_portion || 0) - moraCobrada;
+        const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - moraCobrada;
         nuevoPrincipalPagadoEstaCuota = Math.round(capitalReal);
       }
       const { error } = await supabase.from('loan_installments').update({ status: isLate ? 'LATE' : 'PAID', actual_payment_date: paymentData.actualDate, actual_amount_paid: pagoReal, late_fee_charged: moraCobrada, principal_portion: nuevoPrincipalPagadoEstaCuota }).eq('id', selectedInstallment.id);
@@ -703,7 +679,7 @@ nuevoSaldo += moraAcumulada;
                       <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                         <table className="w-full text-left text-sm whitespace-nowrap">
                           <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
-                            <tr><th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th><th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th><th className="p-3 text-right">Seguro</th><th className="p-3 text-right">Mora</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th><th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th></tr>
+                            <tr><th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th><th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th><th className="p-3 text-right">Mora</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th><th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th></tr>
                           </thead>
                           <tbody className="divide-y divide-slate-700/50">
                             {(()=>{
@@ -720,9 +696,7 @@ nuevoSaldo += moraAcumulada;
                                     <td className="p-3 text-slate-400 text-right tabular-nums">{costos>0?formatCurrency(costos):'--'}</td>
                                     <td className={`p-3 text-right tabular-nums ${Number(inst.principal_portion)<0?'text-red-400':'text-slate-200'}`}>{formatCurrency(inst.principal_portion)}</td>
                                     <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
-                                    <td className="p-3 text-red-400/80 text-right tabular-nums">{Number(inst.insurance_portion||0)>0 ? formatCurrency(inst.insurance_portion) : '--'}</td>
-<td className="p-3 text-red-400/80 text-right tabular-nums">
-{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
+                                    <td className="p-3 text-red-400/80 text-right tabular-nums">{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
                                     <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(vr)}</td>
                                     <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
                                     <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
@@ -920,12 +894,7 @@ nuevoSaldo += moraAcumulada;
           </div>
         </div>
       )}
-{pazYSalvoData.seguroPazYSalvo > 0 && (
-  <div className="flex justify-between text-sm">
-    <span className="text-slate-400">Seguro del período:</span>
-    <span className="text-amber-400 font-mono">+ {formatCurrency(pazYSalvoData.seguroPazYSalvo)}</span>
-  </div>
-)}
+
       {/* MODAL NOTIFICACIÓN */}
       {showNotificationModal&&notificationInstallment&&selectedLoan&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -983,3 +952,4 @@ nuevoSaldo += moraAcumulada;
     </div>
   );
 }
+    
