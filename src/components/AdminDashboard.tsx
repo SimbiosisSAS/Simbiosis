@@ -35,7 +35,7 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
   const [showAjusteModal, setShowAjusteModal] = useState(false);
-const [ajusteParams, setAjusteParams] = useState({ instalmentIds:[] as string[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', valor:0, razon:'' });
+const [ajusteParams, setAjusteParams] = useState({ instalmentIds:[] as string[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', operacion:'DESCUENTO', valor:0, razon:'' });
   const [restructuringParams, setRestructuringParams] = useState({ nuevaTasa: 0, nuevosPlazo: 0, capitalizarMora: false });
   const [showNotifModal, setShowNotifModal] = useState(false);
 const [notifData, setNotifData] = useState({ phone: '', installment: null as any });
@@ -187,18 +187,24 @@ const handleAplicarAjuste = async () => {
   const selected = loanInstallments.filter(i => ajusteParams.instalmentIds.includes(i.id));
   const totalBase = selected.reduce((s, i) => s + Number(i.expected_amount), 0);
   const totalAjuste = ajusteParams.tipoCalculo === 'PORCENTAJE' ? Math.round(totalBase * ajusteParams.valor / 100) : Math.round(ajusteParams.valor);
-  if (totalAjuste >= totalBase) { alert('El ajuste no puede ser mayor o igual al total de las cuotas.'); return; }
+  if (ajusteParams.operacion === 'DESCUENTO' && totalAjuste >= totalBase) { alert('El descuento no puede ser mayor o igual al total de las cuotas.'); return; }
   if (!window.confirm(`¿Aplicar ajuste de ${formatCurrency(totalAjuste)} en ${selected.length} cuota(s)?\n\nRazón: ${ajusteParams.razon}`)) return;
   try {
     for (const inst of selected) {
       const proporcion = Number(inst.expected_amount) / totalBase;
       const ajusteEsta = Math.round(totalAjuste * proporcion);
-      const nuevoMonto = Number(inst.expected_amount) - ajusteEsta;
+      const nuevoMonto = ajusteParams.operacion === 'DESCUENTO' ? Number(inst.expected_amount) - ajusteEsta : Number(inst.expected_amount) + ajusteEsta;
       let nuevoPrincipal = Number(inst.principal_portion);
       let nuevoInteres = Number(inst.interest_portion);
-      if (ajusteParams.tipoAjuste === 'CAPITAL') { nuevoPrincipal = Math.max(0, nuevoPrincipal - ajusteEsta); }
-      else if (ajusteParams.tipoAjuste === 'INTERES') { nuevoInteres = Math.max(0, nuevoInteres - ajusteEsta); }
-      else { const f = nuevoMonto / Number(inst.expected_amount); nuevoPrincipal = Math.round(nuevoPrincipal * f); nuevoInteres = Math.round(nuevoInteres * f); }
+      if (ajusteParams.operacion === 'DESCUENTO') {
+  if (ajusteParams.tipoAjuste === 'CAPITAL') { nuevoPrincipal = Math.max(0, nuevoPrincipal - ajusteEsta); }
+  else if (ajusteParams.tipoAjuste === 'INTERES') { nuevoInteres = Math.max(0, nuevoInteres - ajusteEsta); }
+  else { const f = nuevoMonto / Number(inst.expected_amount); nuevoPrincipal = Math.round(nuevoPrincipal * f); nuevoInteres = Math.round(nuevoInteres * f); }
+} else {
+  if (ajusteParams.tipoAjuste === 'CAPITAL') { nuevoPrincipal = nuevoPrincipal + ajusteEsta; }
+  else if (ajusteParams.tipoAjuste === 'INTERES') { nuevoInteres = nuevoInteres + ajusteEsta; }
+  else { nuevoPrincipal = Math.round(nuevoPrincipal * (nuevoMonto / Number(inst.expected_amount))); nuevoInteres = Math.round(nuevoInteres * (nuevoMonto / Number(inst.expected_amount))); }
+}
       await supabase.from('loan_installments').update({ expected_amount: nuevoMonto, principal_portion: nuevoPrincipal, interest_portion: nuevoInteres, ajuste_amount: ajusteEsta, ajuste_reason: ajusteParams.razon }).eq('id', inst.id);
     }
     alert(`¡Ajuste aplicado! Total: ${formatCurrency(totalAjuste)}`);
@@ -848,55 +854,62 @@ const handleEnviarNotificacion = async () => {
         )}
         </div>
         {showAjusteModal&&selectedLoan&&(
-  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
-      <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Settings className="text-cyan-400"/>Aplicar Ajuste</h2>
-      <p className="text-slate-400 text-sm mb-4">Descuento para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
-      <div className="bg-slate-950 rounded-xl border border-slate-800 mb-4 max-h-48 overflow-y-auto">
-        <div className="p-3 border-b border-slate-800 flex justify-between items-center">
-          <span className="text-xs text-slate-400 uppercase font-semibold">Cuotas pendientes</span>
-          <button onClick={()=>setAjusteParams(p=>({...p,instalmentIds:loanInstallments.filter(i=>i.status==='PENDING').map(i=>i.id)}))} className="text-xs text-cyan-400 hover:text-cyan-300">Seleccionar todas</button>
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Settings className="text-cyan-400"/>Aplicar Ajuste</h2>
+            <p className="text-slate-400 text-sm mb-4">Descuento o recargo para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl border border-slate-800 mb-4 max-h-48 overflow-y-auto">
+              <div className="p-3 border-b border-slate-800 flex justify-between items-center">
+                <span className="text-xs text-slate-400 uppercase font-semibold">Cuotas pendientes</span>
+                <button onClick={()=>setAjusteParams(p=>({...p,instalmentIds:loanInstallments.filter(i=>i.status==='PENDING').map(i=>i.id)}))} className="text-xs text-cyan-400 hover:text-cyan-300">Seleccionar todas</button>
+              </div>
+              {loanInstallments.filter(i=>i.status==='PENDING').map(inst=>(
+                <label key={inst.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/50 cursor-pointer border-b border-slate-800/50 last:border-0">
+                  <input type="checkbox" checked={ajusteParams.instalmentIds.includes(inst.id)} onChange={e=>{const ids=e.target.checked?[...ajusteParams.instalmentIds,inst.id]:ajusteParams.instalmentIds.filter(id=>id!==inst.id);setAjusteParams(p=>({...p,instalmentIds:ids}));}} className="h-4 w-4 text-cyan-500"/>
+                  <span className="text-sm text-slate-300 flex-1">Cuota #{inst.installment_number} — {inst.expected_payment_date}</span>
+                  <span className="text-sm text-emerald-400 font-mono">{formatCurrency(inst.expected_amount)}</span>
+                </label>
+              ))}
+            </div>
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Operación</label>
+              <select value={ajusteParams.operacion} onChange={e=>setAjusteParams(p=>({...p,operacion:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
+                <option value="DESCUENTO">Descuento (reduce la cuota)</option>
+                <option value="RECARGO">Recargo (aumenta la cuota)</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tipo</label>
+                <select value={ajusteParams.tipoCalculo} onChange={e=>setAjusteParams(p=>({...p,tipoCalculo:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
+                  <option value="MONTO">Monto fijo ($)</option>
+                  <option value="PORCENTAJE">Porcentaje (%)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Aplica sobre</label>
+                <select value={ajusteParams.tipoAjuste} onChange={e=>setAjusteParams(p=>({...p,tipoAjuste:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
+                  <option value="TOTAL">Total cuota</option>
+                  <option value="CAPITAL">Solo capital</option>
+                  <option value="INTERES">Solo interes</option>
+                </select>
+              </div>
+            </div>
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Valor del ajuste</label>
+              <input type="number" min="0" value={ajusteParams.valor||''} onChange={e=>setAjusteParams(p=>({...p,valor:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder={ajusteParams.tipoCalculo==='PORCENTAJE'?'Ej: 10':'Ej: 200000'}/>
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razon del ajuste</label>
+              <input type="text" value={ajusteParams.razon} onChange={e=>setAjusteParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder="Ej: Acuerdo de cierre, buen cliente..."/>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={()=>setShowAjusteModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleAplicarAjuste} disabled={ajusteParams.instalmentIds.length===0||!ajusteParams.valor||!ajusteParams.razon.trim()} className="flex-1 px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Ajuste</button>
+            </div>
+          </div>
         </div>
-        {loanInstallments.filter(i=>i.status==='PENDING').map(inst=>(
-          <label key={inst.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/50 cursor-pointer border-b border-slate-800/50 last:border-0">
-            <input type="checkbox" checked={ajusteParams.instalmentIds.includes(inst.id)} onChange={e=>{const ids=e.target.checked?[...ajusteParams.instalmentIds,inst.id]:ajusteParams.instalmentIds.filter(id=>id!==inst.id);setAjusteParams(p=>({...p,instalmentIds:ids}));}} className="h-4 w-4 text-cyan-500"/>
-            <span className="text-sm text-slate-300 flex-1">Cuota #{inst.installment_number} — {inst.expected_payment_date}</span>
-            <span className="text-sm text-emerald-400 font-mono">{formatCurrency(inst.expected_amount)}</span>
-          </label>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tipo</label>
-          <select value={ajusteParams.tipoCalculo} onChange={e=>setAjusteParams(p=>({...p,tipoCalculo:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
-            <option value="MONTO">Monto fijo ($)</option>
-            <option value="PORCENTAJE">Porcentaje (%)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Aplica sobre</label>
-          <select value={ajusteParams.tipoAjuste} onChange={e=>setAjusteParams(p=>({...p,tipoAjuste:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
-            <option value="TOTAL">Total cuota</option>
-            <option value="CAPITAL">Solo capital</option>
-            <option value="INTERES">Solo interés</option>
-          </select>
-        </div>
-      </div>
-      <div className="mb-3">
-        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Valor del ajuste</label>
-        <input type="number" min="0" value={ajusteParams.valor||''} onChange={e=>setAjusteParams(p=>({...p,valor:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder={ajusteParams.tipoCalculo==='PORCENTAJE'?'Ej: 10':'Ej: 200000'}/>
-      </div>
-      <div className="mb-4">
-        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razón del ajuste</label>
-        <input type="text" value={ajusteParams.razon} onChange={e=>setAjusteParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder="Ej: Acuerdo de cierre, buen cliente..."/>
-      </div>
-      <div className="flex gap-3">
-        <button onClick={()=>setShowAjusteModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
-        <button onClick={handleAplicarAjuste} disabled={ajusteParams.instalmentIds.length===0||!ajusteParams.valor||!ajusteParams.razon.trim()} className="flex-1 px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Ajuste</button>
-      </div>
-    </div>
-  </div>
-)}
+      )}
       {/* MODAL REVERSIÓN */}
       {showReversalModal&&installmentToRevert&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
