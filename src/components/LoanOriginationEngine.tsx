@@ -93,7 +93,8 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
 
     if (i === n) principalPortion = balance;
 
-    const totalPaymentForPeriod = fixedPayment;
+    const insurance = params.monthlyInsurance || 0;
+    const totalPaymentForPeriod = fixedPayment + insurance;
     const closingBalance = i === n ? 0 : Math.max(0, balance - principalPortion);
 
     rows.push({
@@ -104,6 +105,7 @@ function generateAmortization(params: LoanParams): { rows: AmortizationRow[]; mo
       openingBalance: Math.round(balance),
       principal: Math.round(principalPortion),
       interest: Math.round(interestPortion),
+      insurancePortion: params.monthlyInsurance || 0,
       paymentAmount: Math.round(totalPaymentForPeriod),
       closingBalance: Math.round(closingBalance),
     });
@@ -125,6 +127,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
     originationCosts: 0,
     disbursementDate: '',
     firstPaymentDate: '',
+    monthlyInsurance: 0,
     nominalRateMV: 0,
     termMonths: 0,
   });
@@ -225,6 +228,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
           fixed_quota_amount: result.monthlyPayment,
           total_payment: result.totalPayment,
           tir: result.tir,
+          monthly_insurance: params.monthlyInsurance || 0,
           status: 'ACTIVE'
         })
         .select()
@@ -242,6 +246,7 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
         expected_amount: row.paymentAmount,
         principal_portion: row.principal,
         interest_portion: row.interest,
+        insurance_portion: row.insurancePortion,
         status: 'PENDING',
         actual_amount_paid: 0,
         late_fee_charged: 0,
@@ -392,6 +397,10 @@ export default function LoanOriginationEngine({ prefillData }: { prefillData?: a
                 <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha de Desembolso</label>
                 <input type="date" value={params.disbursementDate} onChange={(e) => setParams(p => ({ ...p, disbursementDate: e.target.value }))} className={inputClass} />
               </div>
+              <div>
+  <label className={labelClass}><DollarSign className="w-3 h-3 inline mr-1" />Seguro Mensual (COP)</label>
+  <input type="number" min="0" value={params.monthlyInsurance || ''} onChange={e => setParams(p => ({ ...p, monthlyInsurance: Number(e.target.value) }))} className={inputClass} placeholder="0 — dejar vacío si no aplica" />
+</div>
               <div>
   <label className={labelClass}><Calendar className="w-3 h-3 inline mr-1" />Fecha del Primer Pago (opcional)</label>
   <input type="date" value={params.firstPaymentDate} onChange={e => setParams(p => ({ ...p, firstPaymentDate: e.target.value }))} className={inputClass} />
