@@ -193,19 +193,26 @@ const handleAplicarAjuste = async () => {
     for (const inst of selected) {
       const proporcion = Number(inst.expected_amount) / totalBase;
       const ajusteEsta = Math.round(totalAjuste * proporcion);
-      const nuevoMonto = ajusteParams.operacion === 'DESCUENTO' ? Number(inst.expected_amount) - ajusteEsta : Number(inst.expected_amount) + ajusteEsta;
+      const signedAjuste = ajusteParams.operacion === 'DESCUENTO' ? -ajusteEsta : ajusteEsta;
+      const nuevoMonto = Number(inst.expected_amount) + signedAjuste;
+
       let nuevoPrincipal = Number(inst.principal_portion);
       let nuevoInteres = Number(inst.interest_portion);
-      if (ajusteParams.operacion === 'DESCUENTO') {
-  if (ajusteParams.tipoAjuste === 'CAPITAL') { nuevoPrincipal = Math.max(0, nuevoPrincipal - ajusteEsta); }
-  else if (ajusteParams.tipoAjuste === 'INTERES') { nuevoInteres = Math.max(0, nuevoInteres - ajusteEsta); }
-  else { const f = nuevoMonto / Number(inst.expected_amount); nuevoPrincipal = Math.round(nuevoPrincipal * f); nuevoInteres = Math.round(nuevoInteres * f); }
-} else {
-  if (ajusteParams.tipoAjuste === 'CAPITAL') { nuevoPrincipal = nuevoPrincipal + ajusteEsta; }
-  else if (ajusteParams.tipoAjuste === 'INTERES') { nuevoInteres = nuevoInteres + ajusteEsta; }
-  else { nuevoPrincipal = Math.round(nuevoPrincipal * (nuevoMonto / Number(inst.expected_amount))); nuevoInteres = Math.round(nuevoInteres * (nuevoMonto / Number(inst.expected_amount))); }
-}
-      await supabase.from('loan_installments').update({ expected_amount: nuevoMonto, principal_portion: nuevoPrincipal, interest_portion: nuevoInteres, ajuste_amount: ajusteEsta, ajuste_reason: ajusteParams.razon }).eq('id', inst.id);
+
+      if (ajusteParams.tipoAjuste === 'CAPITAL') {
+        nuevoPrincipal = Math.max(0, nuevoPrincipal + signedAjuste);
+      } else if (ajusteParams.tipoAjuste === 'INTERES') {
+        nuevoInteres = Math.max(0, nuevoInteres + signedAjuste);
+      }
+      // Para TOTAL: capital e interés NO cambian, solo cambia expected_amount
+
+      await supabase.from('loan_installments').update({
+        expected_amount: nuevoMonto,
+        principal_portion: nuevoPrincipal,
+        interest_portion: nuevoInteres,
+        ajuste_amount: signedAjuste,
+        ajuste_reason: ajusteParams.razon,
+      }).eq('id', inst.id);
     }
     alert(`¡Ajuste aplicado! Total: ${formatCurrency(totalAjuste)}`);
     setShowAjusteModal(false);
@@ -734,7 +741,7 @@ const handleEnviarNotificacion = async () => {
                                     <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
                                     <td className="p-3 text-slate-400 text-right tabular-nums">{Number(inst.insurance_portion||0)>0?formatCurrency(inst.insurance_portion):'--'}</td>
                                     <td className="p-3 text-red-400/80 text-right tabular-nums">{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
-                                    <td className="p-3 text-cyan-400/80 text-right tabular-nums">{Number(inst.ajuste_amount||0)>0?formatCurrency(inst.ajuste_amount):'--'}</td>
+                                    <td className={`p-3 text-right tabular-nums ${Number(inst.ajuste_amount||0)<0?'text-red-400':Number(inst.ajuste_amount||0)>0?'text-green-400':'text-slate-600'}`}>{Number(inst.ajuste_amount||0)!==0?(Number(inst.ajuste_amount)>0?'+':'')+formatCurrency(Number(inst.ajuste_amount)):'--'}</td>
                                     <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(vr)}</td>
                                     <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
                                     <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
