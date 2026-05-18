@@ -715,7 +715,7 @@ const handleEnviarNotificacion = async () => {
                       <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                         <table className="w-full text-left text-sm whitespace-nowrap">
                           <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
-                            <tr><th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th><th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th><th className="p-3 text-right">Mora</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th><th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th></tr>
+                            <tr><th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th><th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th><th className="p-3 text-right">Mora</th><th className="p-3 text-right">Ajuste</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th><th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th></tr>
                           </thead>
                           <tbody className="divide-y divide-slate-700/50">
                             {(()=>{
@@ -733,6 +733,7 @@ const handleEnviarNotificacion = async () => {
                                     <td className={`p-3 text-right tabular-nums ${Number(inst.principal_portion)<0?'text-red-400':'text-slate-200'}`}>{formatCurrency(inst.principal_portion)}</td>
                                     <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
                                     <td className="p-3 text-red-400/80 text-right tabular-nums">{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
+                                    <td className="p-3 text-cyan-400/80 text-right tabular-nums">{Number(inst.ajuste_amount||0)>0?formatCurrency(inst.ajuste_amount):'--'}</td>
                                     <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(vr)}</td>
                                     <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
                                     <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
