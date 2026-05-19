@@ -175,8 +175,9 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
     } catch (err: any) { alert('Error: ' + err.message); }
   };
 
-  const handleSelectLoan = (loan: any) => {
-  setSelectedLoan(loan);
+  const handleSelectLoan = async (loan: any) => {
+  const { data: freshLoan } = await supabase.from('active_loans').select('*').eq('id', loan.id).single();
+  setSelectedLoan(freshLoan || loan);
   fetchInstallments(loan.id);
   fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
   setHistorialCliente([]);
@@ -231,9 +232,22 @@ if (primerasCanceladas.length > 0) {
 }
 
     // Crear nuevo plan
+    let startYear: number, startMonth: number, originalDay: number;
+    if (primerasCanceladas.length > 0) {
+      const d = new Date(primerasCanceladas[0].expected_payment_date + 'T00:00:00');
+      startYear = d.getFullYear(); startMonth = d.getMonth(); originalDay = d.getDate();
+    } else {
+      const d = new Date(); startYear = d.getFullYear(); startMonth = d.getMonth() + 1; originalDay = d.getDate();
+    }
+
     let currentBalance = nuevoSaldo;
     for (let i = 0; i < nuevosPlazo; i++) {
-      lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
+      const targetMonth = (startMonth + i) % 12;
+      const targetYear = startYear + Math.floor((startMonth + i) / 12);
+      const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+      const targetDay = Math.min(originalDay, daysInMonth);
+      const nextDateStr = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(targetDay).padStart(2,'0')}`;
+
       const interest = Math.round(currentBalance * rate);
       let principal = Math.round(netCuota - interest);
 
@@ -241,19 +255,18 @@ if (primerasCanceladas.length > 0) {
         principal = Math.round(currentBalance);
         await supabase.from('loan_installments').insert({
           loan_id: selectedLoan.id, installment_number: nextInstNumber,
-          expected_payment_date: lastDate.toISOString().split('T')[0],
+          expected_payment_date: nextDateStr,
           expected_amount: principal + interest + nuevoSeguro,
           principal_portion: principal, interest_portion: interest,
           insurance_portion: nuevoSeguro, status: 'PENDING',
           actual_amount_paid: 0, late_fee_charged: 0,
         });
-        currentBalance = 0;
-        break;
+        currentBalance = 0; break;
       }
 
       await supabase.from('loan_installments').insert({
         loan_id: selectedLoan.id, installment_number: nextInstNumber,
-        expected_payment_date: lastDate.toISOString().split('T')[0],
+        expected_payment_date: nextDateStr,
         expected_amount: principal + interest + nuevoSeguro,
         principal_portion: principal, interest_portion: interest,
         insurance_portion: nuevoSeguro, status: 'PENDING',
