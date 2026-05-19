@@ -303,7 +303,9 @@ if (primerasCanceladas.length > 0) {
     setRefinanciarParams({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
     await fetchInstallments(selectedLoan.id);
     await fetchHistorialRefinanciaciones(selectedLoan.id);
-    const { data: updatedLoan } = await supabase.from('active_loans').select('*').eq('id', selectedLoan.id).single();
+    await fetchInstallments(selectedLoan.id);
+await fetchHistorialRefinanciaciones(selectedLoan.id);
+const { data: updatedLoan } = await supabase.from('active_loans').select('*').eq('id', selectedLoan.id).single();
 if (updatedLoan) setSelectedLoan(updatedLoan);
 fetchActiveLoans();
   } catch (err: any) {
