@@ -548,7 +548,7 @@ const handleEnviarNotificacion = async () => {
       if (abonoCapitalExtra > 0) {
         nuevoPrincipalPagadoEstaCuota = Number(selectedInstallment.principal_portion) + abonoCapitalExtra;
       } else {
-        const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - moraCobrada;
+        const capitalReal = pagoReal - Number(selectedInstallment.interest_portion) - Number(selectedInstallment.insurance_portion || 0) - moraCobrada;
         nuevoPrincipalPagadoEstaCuota = Math.round(capitalReal);
       }
       const { error } = await supabase.from('loan_installments').update({ status: isLate ? 'LATE' : 'PAID', actual_payment_date: paymentData.actualDate, actual_amount_paid: pagoReal, late_fee_charged: moraCobrada, principal_portion: nuevoPrincipalPagadoEstaCuota }).eq('id', selectedInstallment.id);
