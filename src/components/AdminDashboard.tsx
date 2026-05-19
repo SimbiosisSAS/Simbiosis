@@ -369,12 +369,6 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
       const interest = Math.round(currentBalance * rate);
       let principal = fixedQuota - interest;
-      if (principal >= currentBalance) {
-        principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' }).eq('id', inst.id);
-        currentBalance = 0; lastDate = new Date(inst.expected_payment_date); nextInstNumber = inst.installment_number + 1; continue;
-      }
       principal = Math.round(principal);
       await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance,
 insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' }).eq('id', inst.id);
