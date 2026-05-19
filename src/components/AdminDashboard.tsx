@@ -220,7 +220,8 @@ const handleRefinanciar = async () => {
 
     // Número de cuota y fecha de inicio
     const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
-    let nextInstNumber = (todasOrdenadas[0]?.installment_number || 0) + 1;
+    const primerasCanceladas = [...pendientes].sort((a,b) => a.installment_number - b.installment_number);
+let nextInstNumber = primerasCanceladas.length > 0 ? primerasCanceladas[0].installment_number : (todasOrdenadas[0]?.installment_number || 0) + 1;
     let lastDate = new Date();
 
     // Crear nuevo plan
@@ -531,7 +532,14 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
     if (!selectedLoan || loanInstallments.length === 0) return;
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     let saldoTemp = capitalOriginal + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
-    const filas = loanInstallments.filter(i => i.status !== 'PAID_EARLY').map((inst, index) => {
+    const filas = loanInstallments.filter(i => i.status !== 'PAID_EARLY').map((inst, index, arr) => {
+if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
+  const prev = arr[index-1];
+  if ((prev.status==='PAID'||prev.status==='LATE') && inst.status==='PENDING') {
+    tempBal += refinanciacionAcumulada;
+    refinanciacionApplied = true;
+  }
+}
       const saldoInicio = saldoTemp;
       const capital = Number(inst.principal_portion);
       let saldoFinal = Math.max(saldoInicio - capital, 0);
@@ -851,7 +859,9 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                           </thead>
                           <tbody className="divide-y divide-slate-700/50">
                             {(()=>{
-                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0) + Number(selectedLoan.refinanciacion_acumulada||0);
+                              const refinanciacionAcumulada = Number(selectedLoan.refinanciacion_acumulada || 0);
+let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
+let refinanciacionApplied = false;
                               return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index)=>{
                                 const si=tempBal; let sf=Math.max(si-Number(inst.principal_portion),0); tempBal=sf;
                                 const costos=index===0?Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0):0;
