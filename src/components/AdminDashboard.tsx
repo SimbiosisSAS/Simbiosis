@@ -176,11 +176,12 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   };
 
   const handleSelectLoan = (loan: any) => {
-    setSelectedLoan(loan);
-    fetchInstallments(loan.id);
-    fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
-    setHistorialCliente([]);
-  };
+  setSelectedLoan(loan);
+  fetchInstallments(loan.id);
+  fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
+  setHistorialCliente([]);
+  fetchHistorialRefinanciaciones(loan.id);
+};
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan || !window.confirm(`¿Eliminar el crédito de ${selectedLoan.client_name}? No se puede deshacer.`)) return;
