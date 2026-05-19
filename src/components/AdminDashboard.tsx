@@ -198,7 +198,7 @@ const fetchHistorialRefinanciaciones = async (loanId: string) => {
 
 const handleRefinanciar = async () => {
   if (!selectedLoan) return;
-  const { desembolsoAdicional, nuevaTasa, nuevaCuota, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
+  const { desembolsoAdicional, nuevaTasa, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
   if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa la nueva tasa.'); return; }
   if (!nuevaCuota || nuevaCuota <= 0) { alert('Ingresa la nueva cuota.'); return; }
   if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa el nuevo plazo.'); return; }
@@ -208,7 +208,8 @@ const handleRefinanciar = async () => {
     const saldoAnterior = calculateCurrentBalance();
     const nuevoSaldo = saldoAnterior + desembolsoAdicional;
     const rate = nuevaTasa / 100;
-    const netCuota = nuevaCuota - nuevoSeguro;
+    const netCuota = Math.round(nuevoSaldo * (rate * Math.pow(1+rate, nuevosPlazo)) / (Math.pow(1+rate, nuevosPlazo) - 1));
+const nuevaCuota = netCuota + nuevoSeguro;
 
     // Cancelar cuotas pendientes
     const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
@@ -281,7 +282,9 @@ const handleRefinanciar = async () => {
     setRefinanciarParams({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
     await fetchInstallments(selectedLoan.id);
     await fetchHistorialRefinanciaciones(selectedLoan.id);
-    fetchActiveLoans();
+    const { data: updatedLoan } = await supabase.from('active_loans').select('*').eq('id', selectedLoan.id).single();
+if (updatedLoan) setSelectedLoan(updatedLoan);
+fetchActiveLoans();
   } catch (err: any) {
     alert('Error en refinanciación: ' + err.message);
   }
@@ -847,7 +850,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                           </thead>
                           <tbody className="divide-y divide-slate-700/50">
                             {(()=>{
-                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount);
+                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0) + Number(selectedLoan.refinanciacion_acumulada||0);
                               return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index)=>{
                                 const si=tempBal; let sf=Math.max(si-Number(inst.principal_portion),0); tempBal=sf;
                                 const costos=index===0?Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0):0;
@@ -1000,7 +1003,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                 <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label><input type="number" min="1" value={refinanciarParams.nuevosPlazo||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevosPlazo:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: 12"/></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nueva Cuota Total ($)</label><input type="number" min="0" value={refinanciarParams.nuevaCuota||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevaCuota:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Capital + Interés + Seguro"/></div>
+                <div><label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">Cuota calculada (automático)</label><div className="w-full bg-slate-700/50 border border-emerald-500/30 rounded-xl px-4 py-2 text-emerald-400 font-mono font-bold">{refinanciarParams.nuevaTasa>0&&refinanciarParams.nuevosPlazo>0?formatCurrency(Math.round((calculateCurrentBalance()+refinanciarParams.desembolsoAdicional)*(refinanciarParams.nuevaTasa/100*Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo))/(Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo)-1))+refinanciarParams.nuevoSeguro):'Ingresa tasa y plazo'}</div></div>
                 <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Seguro Mensual ($)</label><input type="number" min="0" value={refinanciarParams.nuevoSeguro||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevoSeguro:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="0 si no aplica"/></div>
               </div>
               <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razon</label><input type="text" value={refinanciarParams.razon} onChange={e=>setRefinanciarParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: Ampliacion de credito por buen comportamiento"/></div>
