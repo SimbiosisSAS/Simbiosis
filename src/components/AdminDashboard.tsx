@@ -324,7 +324,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       }
     } else {
       const fixedQuota = Number(selectedLoan.fixed_quota_amount);
-      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }const insurance = Number(selectedLoan.monthly_insurance || 0);
+      if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
       let done = false;
       for (let i = 0; i < futureInstallments.length; i++) {
         const inst = futureInstallments[i];
@@ -364,6 +364,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
     const ultimaCuota = todasOrdenadas[0];
     let nextInstNumber = ultimaCuota.installment_number + 1;
     let lastDate = new Date(ultimaCuota.expected_payment_date);
+    const insurance = Number(selectedLoan.monthly_insurance || 0);
     for (let i = 0; i < pending.length; i++) {
       const inst = pending[i];
       if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
