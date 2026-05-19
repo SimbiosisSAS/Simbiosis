@@ -200,16 +200,17 @@ const handleRefinanciar = async () => {
   if (!selectedLoan) return;
   const { desembolsoAdicional, nuevaTasa, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
   if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa la nueva tasa.'); return; }
-  if (!nuevaCuota || nuevaCuota <= 0) { alert('Ingresa la nueva cuota.'); return; }
   if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa el nuevo plazo.'); return; }
-  if (!window.confirm(`¿Confirmas la refinanciación de ${selectedLoan.client_name}?\n\nDesembolso adicional: ${formatCurrency(desembolsoAdicional)}\nNuevo saldo total: ${formatCurrency(calculateCurrentBalance() + desembolsoAdicional)}\nNueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses`)) return;
+
+  const saldoAnterior = calculateCurrentBalance();
+  const nuevoSaldo = saldoAnterior + desembolsoAdicional;
+  const rate = nuevaTasa / 100;
+  const netCuota = Math.round(nuevoSaldo * (rate * Math.pow(1+rate, nuevosPlazo)) / (Math.pow(1+rate, nuevosPlazo) - 1));
+  const nuevaCuota = netCuota + nuevoSeguro;
+
+  if (!window.confirm(`¿Confirmas la refinanciación de ${selectedLoan.client_name}?\n\nDesembolso adicional: ${formatCurrency(desembolsoAdicional)}\nNuevo saldo: ${formatCurrency(nuevoSaldo)}\nNueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses`)) return;
 
   try {
-    const saldoAnterior = calculateCurrentBalance();
-    const nuevoSaldo = saldoAnterior + desembolsoAdicional;
-    const rate = nuevaTasa / 100;
-    const netCuota = Math.round(nuevoSaldo * (rate * Math.pow(1+rate, nuevosPlazo)) / (Math.pow(1+rate, nuevosPlazo) - 1));
-const nuevaCuota = netCuota + nuevoSeguro;
 
     // Cancelar cuotas pendientes
     const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
