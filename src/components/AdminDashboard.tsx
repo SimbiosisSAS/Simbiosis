@@ -222,7 +222,13 @@ const handleRefinanciar = async () => {
     const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
     const primerasCanceladas = [...pendientes].sort((a,b) => a.installment_number - b.installment_number);
 let nextInstNumber = primerasCanceladas.length > 0 ? primerasCanceladas[0].installment_number : (todasOrdenadas[0]?.installment_number || 0) + 1;
-    let lastDate = new Date();
+    let lastDate: Date;
+if (primerasCanceladas.length > 0) {
+  lastDate = new Date(primerasCanceladas[0].expected_payment_date + 'T00:00:00');
+  lastDate.setMonth(lastDate.getMonth() - 1);
+} else {
+  lastDate = new Date();
+}
 
     // Crear nuevo plan
     let currentBalance = nuevoSaldo;
