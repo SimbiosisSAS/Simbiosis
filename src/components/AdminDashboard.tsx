@@ -35,7 +35,17 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
   const [showAjusteModal, setShowAjusteModal] = useState(false);
-const [ajusteParams, setAjusteParams] = useState({ instalmentIds:[] as string[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', operacion:'DESCUENTO', valor:0, razon:'' });
+const [showRefinanciarModal, setShowRefinanciarModal] = useState(false);
+const [refinanciarParams, setRefinanciarParams] = useState({
+  desembolsoAdicional: 0,
+  nuevaTasa: 0,
+  nuevaCuota: 0,
+  nuevoSeguro: 0,
+  nuevosPlazo: 0,
+  razon: '',
+});
+const [historialRefinanciaciones, setHistorialRefinanciaciones] = useState<any[]>([]);
+  const [ajusteParams, setAjusteParams] = useState({ instalmentIds:[] as string[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', operacion:'DESCUENTO', valor:0, razon:'' });
   const [restructuringParams, setRestructuringParams] = useState({ nuevaTasa: 0, nuevosPlazo: 0, capitalizarMora: false });
   const [showNotifModal, setShowNotifModal] = useState(false);
 const [notifData, setNotifData] = useState({ phone: '', installment: null as any });
@@ -180,7 +190,102 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
       alert('Crédito eliminado'); setSelectedLoan(null); fetchActiveLoans();
     } catch (err: any) { alert('Error: ' + err.message); }
   };
-const handleAplicarAjuste = async () => {
+const fetchHistorialRefinanciaciones = async (loanId: string) => {
+  const { data } = await supabase.from('loan_refinanciaciones').select('*').eq('loan_id', loanId).order('created_at', { ascending: false });
+  if (data) setHistorialRefinanciaciones(data);
+};
+
+const handleRefinanciar = async () => {
+  if (!selectedLoan) return;
+  const { desembolsoAdicional, nuevaTasa, nuevaCuota, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
+  if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa la nueva tasa.'); return; }
+  if (!nuevaCuota || nuevaCuota <= 0) { alert('Ingresa la nueva cuota.'); return; }
+  if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa el nuevo plazo.'); return; }
+  if (!window.confirm(`¿Confirmas la refinanciación de ${selectedLoan.client_name}?\n\nDesembolso adicional: ${formatCurrency(desembolsoAdicional)}\nNuevo saldo total: ${formatCurrency(calculateCurrentBalance() + desembolsoAdicional)}\nNueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses`)) return;
+
+  try {
+    const saldoAnterior = calculateCurrentBalance();
+    const nuevoSaldo = saldoAnterior + desembolsoAdicional;
+    const rate = nuevaTasa / 100;
+    const netCuota = nuevaCuota - nuevoSeguro;
+
+    // Cancelar cuotas pendientes
+    const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
+    for (const inst of pendientes) {
+      await supabase.from('loan_installments').update({ status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0 }).eq('id', inst.id);
+    }
+
+    // Número de cuota y fecha de inicio
+    const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
+    let nextInstNumber = (todasOrdenadas[0]?.installment_number || 0) + 1;
+    let lastDate = new Date();
+
+    // Crear nuevo plan
+    let currentBalance = nuevoSaldo;
+    for (let i = 0; i < nuevosPlazo; i++) {
+      lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
+      const interest = Math.round(currentBalance * rate);
+      let principal = Math.round(netCuota - interest);
+
+      if (principal >= currentBalance || i === nuevosPlazo - 1) {
+        principal = Math.round(currentBalance);
+        await supabase.from('loan_installments').insert({
+          loan_id: selectedLoan.id, installment_number: nextInstNumber,
+          expected_payment_date: lastDate.toISOString().split('T')[0],
+          expected_amount: principal + interest + nuevoSeguro,
+          principal_portion: principal, interest_portion: interest,
+          insurance_portion: nuevoSeguro, status: 'PENDING',
+          actual_amount_paid: 0, late_fee_charged: 0,
+        });
+        currentBalance = 0;
+        break;
+      }
+
+      await supabase.from('loan_installments').insert({
+        loan_id: selectedLoan.id, installment_number: nextInstNumber,
+        expected_payment_date: lastDate.toISOString().split('T')[0],
+        expected_amount: principal + interest + nuevoSeguro,
+        principal_portion: principal, interest_portion: interest,
+        insurance_portion: nuevoSeguro, status: 'PENDING',
+        actual_amount_paid: 0, late_fee_charged: 0,
+      });
+
+      currentBalance = Math.round(currentBalance - principal);
+      nextInstNumber++;
+    }
+
+    // Actualizar active_loans
+    await supabase.from('active_loans').update({
+      interest_rate_monthly: nuevaTasa,
+      fixed_quota_amount: netCuota,
+      monthly_insurance: nuevoSeguro,
+      refinanciacion_acumulada: Number(selectedLoan.refinanciacion_acumulada || 0) + desembolsoAdicional,
+    }).eq('id', selectedLoan.id);
+
+    // Guardar historial
+    await supabase.from('loan_refinanciaciones').insert({
+      loan_id: selectedLoan.id,
+      fecha: new Date().toISOString().split('T')[0],
+      desembolso_adicional: desembolsoAdicional,
+      saldo_anterior: saldoAnterior,
+      nueva_tasa: nuevaTasa,
+      nuevo_seguro: nuevoSeguro,
+      nueva_cuota: nuevaCuota,
+      nuevo_plazo: nuevosPlazo,
+      razon,
+    });
+
+    alert(`¡Refinanciación aplicada! Nuevo plan de ${nuevosPlazo} cuotas de ${formatCurrency(nuevaCuota)}`);
+    setShowRefinanciarModal(false);
+    setRefinanciarParams({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
+    await fetchInstallments(selectedLoan.id);
+    await fetchHistorialRefinanciaciones(selectedLoan.id);
+    fetchActiveLoans();
+  } catch (err: any) {
+    alert('Error en refinanciación: ' + err.message);
+  }
+};
+  const handleAplicarAjuste = async () => {
   if (!selectedLoan || ajusteParams.instalmentIds.length === 0) return;
   if (!ajusteParams.razon.trim()) { alert('Ingresa una razón para el ajuste.'); return; }
   if (!ajusteParams.valor || ajusteParams.valor <= 0) { alert('Ingresa un valor válido.'); return; }
@@ -355,7 +460,9 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
     if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
     const fixedQuota = Number(selectedLoan.fixed_quota_amount);
     if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount)
+  + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
+  + Number(selectedLoan.refinanciacion_acumulada || 0);
     const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
     let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
     if (currentBalance <= 0.5) { alert('El crédito ya está completamente saldado.'); return; }
@@ -686,6 +793,16 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
         <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
         <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
         <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
+        <button
+  onClick={()=>{
+    setRefinanciarParams({desembolsoAdicional:0,nuevaTasa:Number(selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??0),nuevaCuota:Number(selectedLoan.fixed_quota_amount||0)+Number(selectedLoan.monthly_insurance||0),nuevoSeguro:Number(selectedLoan.monthly_insurance||0),nuevosPlazo:12,razon:''});
+    fetchHistorialRefinanciaciones(selectedLoan.id);
+    setShowRefinanciarModal(true);
+  }}
+  className="text-violet-400 hover:text-white px-3 py-1.5 bg-violet-900/20 hover:bg-violet-600 rounded-lg text-sm border border-violet-900/50 transition-colors flex items-center gap-1"
+>
+  <TrendingUp size={14}/> Refinanciar
+</button>
         <button onClick={()=>{setAjusteParams({instalmentIds:[],tipoAjuste:'TOTAL',tipoCalculo:'MONTO',operacion:'DESCUENTO',valor:0,razon:''});setShowAjusteModal(true);}} className="text-cyan-400 hover:text-white px-3 py-1.5 bg-cyan-900/20 hover:bg-cyan-600 rounded-lg text-sm border border-cyan-900/50 transition-colors flex items-center gap-1"><Settings size={14}/> Ajustes</button>
         <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>
         {calculateCurrentBalance() === 0 && (
@@ -865,6 +982,54 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
           </>
         )}
         </div>
+        {showRefinanciarModal&&selectedLoan&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><TrendingUp className="text-violet-400"/>Refinanciación</h2>
+            <p className="text-slate-400 text-sm mb-4">Nuevas condiciones para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Saldo actual:</span><span className="text-white font-mono font-bold">{formatCurrency(calculateCurrentBalance())}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Tasa actual:</span><span className="text-slate-300">{selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??'--'}% MV</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota actual:</span><span className="text-slate-300">{formatCurrency(Number(selectedLoan.fixed_quota_amount||0)+Number(selectedLoan.monthly_insurance||0))}</span></div>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Desembolso adicional ($)</label><input type="number" min="0" value={refinanciarParams.desembolsoAdicional||''} onChange={e=>setRefinanciarParams(p=>({...p,desembolsoAdicional:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="0 si no hay desembolso adicional"/></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nueva Tasa MV (%)</label><input type="number" step="0.01" value={refinanciarParams.nuevaTasa||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevaTasa:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: 1.5"/></div>
+                <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label><input type="number" min="1" value={refinanciarParams.nuevosPlazo||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevosPlazo:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: 12"/></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nueva Cuota Total ($)</label><input type="number" min="0" value={refinanciarParams.nuevaCuota||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevaCuota:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Capital + Interés + Seguro"/></div>
+                <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Seguro Mensual ($)</label><input type="number" min="0" value={refinanciarParams.nuevoSeguro||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevoSeguro:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="0 si no aplica"/></div>
+              </div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razon</label><input type="text" value={refinanciarParams.razon} onChange={e=>setRefinanciarParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: Ampliacion de credito por buen comportamiento"/></div>
+            </div>
+            {refinanciarParams.nuevaCuota>0&&refinanciarParams.nuevosPlazo>0&&(
+              <div className="bg-violet-500/10 border border-violet-500/30 rounded-xl p-3 mb-4 space-y-1">
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Nuevo saldo total:</span><span className="text-violet-400 font-mono font-bold">{formatCurrency(calculateCurrentBalance()+refinanciarParams.desembolsoAdicional)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Nueva cuota:</span><span className="text-violet-400 font-mono">{formatCurrency(refinanciarParams.nuevaCuota)}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-slate-400">Plazo:</span><span className="text-violet-400">{refinanciarParams.nuevosPlazo} meses</span></div>
+              </div>
+            )}
+            {historialRefinanciaciones.length>0&&(
+              <div className="bg-slate-800/50 rounded-xl p-3 mb-4">
+                <p className="text-xs font-bold text-slate-400 uppercase mb-2">Historial de refinanciaciones</p>
+                {historialRefinanciaciones.map(r=>(
+                  <div key={r.id} className="flex justify-between text-xs text-slate-300 py-1 border-b border-slate-700/50 last:border-0">
+                    <span>{r.fecha}</span>
+                    <span className="text-emerald-400 font-mono">+{formatCurrency(r.desembolso_adicional)}</span>
+                    <span className="text-slate-400">{r.nueva_tasa}% MV</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button onClick={()=>setShowRefinanciarModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleRefinanciar} disabled={!refinanciarParams.nuevaTasa||!refinanciarParams.nuevaCuota||!refinanciarParams.nuevosPlazo} className="flex-1 px-4 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Refinanciación</button>
+            </div>
+          </div>
+        </div>
+      )}
         {showAjusteModal&&selectedLoan&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
