@@ -451,7 +451,7 @@ fetchActiveLoans();
         if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
         if (principal < 0) principal = 0;
         updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
         currentBalance = Math.round(currentBalance - principal);
       }
     } else {
@@ -466,13 +466,13 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
           updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
           currentBalance = 0; done = true; continue;
         }
         principal = Math.round(principal);
         currentBalance = Math.round(currentBalance - principal);
         updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
       }
     }
     for (const u of updates) {
@@ -506,7 +506,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       let principal = fixedQuota - interest;
       principal = Math.round(principal);
       await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING' }).eq('id', inst.id);
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
       currentBalance = Math.round(currentBalance - principal);
       lastDate = new Date(inst.expected_payment_date); nextInstNumber = inst.installment_number + 1;
     }
@@ -518,12 +518,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
         await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = 0; break;
       }
       principal = Math.round(principal);
       await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
       currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
     }
     alert('¡Plan recalculado correctamente!');
@@ -669,7 +669,7 @@ const handleEnviarNotificacion = async () => {
         if (principal >= currentBalance || i === nuevosPlazo - 1) principal = Math.round(currentBalance);
         principal = Math.round(principal);
         await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: lastDate.toISOString().split('T')[0], expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, insurance_portion: insurance, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
       }
       await supabase.from('active_loans').update({ interest_rate_monthly: restructuringParams.nuevaTasa, fixed_quota_amount: nuevaCuota, installments: nuevosPlazo }).eq('id', selectedLoan.id);
