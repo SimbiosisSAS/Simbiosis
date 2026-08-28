@@ -505,7 +505,21 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       Number(i.ajuste_amount || 0) < 0
     ).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
     let currentBalance = Math.max(capitalOriginal - capitalPagado - capitalPerdonado, 0);
-    if (currentBalance <= 0.5) { alert('El crédito ya está completamente saldado.'); return; }
+    if (currentBalance <= 0.5) {
+  const pendientesAAnular = loanInstallments.filter(i => i.status === 'PENDING');
+  if (pendientesAAnular.length === 0) {
+    alert('El crédito ya está completamente saldado.');
+    return;
+  }
+  for (const inst of pendientesAAnular) {
+    await supabase.from('loan_installments').update({
+      status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0
+    }).eq('id', inst.id);
+  }
+  alert('¡Crédito saldado! Las cuotas pendientes fueron anuladas.');
+  await fetchInstallments(selectedLoan.id);
+  return;
+}
     const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
     const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
     const ultimaCuota = todasOrdenadas[0];
