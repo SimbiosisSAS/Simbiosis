@@ -811,7 +811,17 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                     <table className="w-full text-left"><thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50"><tr><th className="p-4">Cliente</th><th className="p-4 text-right">Monto</th>{!selectedLoan&&<th className="p-4 text-center">Detalle</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-700/50">{activeLoans.map(loan=>(
                       <tr key={loan.id} onClick={()=>handleSelectLoan(loan)} className={`cursor-pointer transition-colors ${selectedLoan?.id===loan.id?'bg-emerald-500/10 border-l-4 border-emerald-500':'hover:bg-slate-700/20'}`}>
-                        <td className="p-4"><p className="font-bold text-slate-200 text-sm truncate">{loan.client_name}</p><p className="text-xs text-slate-500 font-mono">{loan.client_id_number||loan.client_id}</p></td>
+                        <td className="p-4">
+  <div className="flex items-center gap-2 mb-0.5">
+    {loan.loan_number && (
+      <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded px-1.5 py-0.5 font-mono font-bold shrink-0">
+        #{loan.loan_number}
+      </span>
+    )}
+    <p className="font-bold text-slate-200 text-sm truncate">{loan.client_name}</p>
+  </div>
+  <p className="text-xs text-slate-500 font-mono">{loan.client_id_number||loan.client_id}</p>
+</td>
                         <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(loan.principal_amount||loan.loan_amount)}</td>
                         {!selectedLoan&&<td className="p-4 text-center"><button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg"><Eye size={16}/></button></td>}
                       </tr>
