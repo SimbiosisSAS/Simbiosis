@@ -351,6 +351,7 @@ fetchActiveLoans();
         interest_portion: nuevoInteres,
         ajuste_amount: signedAjuste,
         ajuste_reason: ajusteParams.razon,
+ajuste_tipo: ajusteParams.tipoAjuste,
       }).eq('id', inst.id);
     }
     alert(`¡Ajuste aplicado! Total: ${formatCurrency(totalAjuste)}`);
@@ -901,7 +902,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
 let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
 let refinanciacionApplied = false;
                               return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index)=>{
-                                const si=tempBal; let sf=Math.max(si-Number(inst.principal_portion),0); tempBal=sf;
+                                const si=tempBal;
+const ajusteAmt = Number(inst.ajuste_amount || 0);
+const ajusteTipo = inst.ajuste_tipo || 'TOTAL';
+const saldoAjuste = ajusteTipo === 'CAPITAL' && ajusteAmt < 0 ? ajusteAmt : 0;
+let sf = Math.max(si - Number(inst.principal_portion) + saldoAjuste, 0);
+tempBal=sf;
                                 const costos=index===0?Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0):0;
                                 const vr=Number(inst.expected_amount);
                                 return (
