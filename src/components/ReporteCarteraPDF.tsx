@@ -31,9 +31,9 @@ export default function ReporteCarteraPDF() {
     setGenerating(true);
     try {
       const [loansRes, instRes] = await Promise.all([
-        supabase.from('active_loans').select('*'),
-        supabase.from('loan_installments').select('*'),
-      ]);
+  supabase.from('active_loans').select('*'),
+  supabase.from('loan_installments').select('*').range(0, 49999),
+]);
 
       const loans = loansRes.data || [];
       const installments = instRes.data || [];
