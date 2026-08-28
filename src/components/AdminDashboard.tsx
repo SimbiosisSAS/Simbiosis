@@ -892,10 +892,10 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                     {loading?<p className="text-slate-400 text-center py-8">Cargando cuotas...</p>:(
                       <div className="overflow-x-auto bg-slate-900/30 rounded-xl border border-slate-700/50">
                         <table className="w-full text-left text-sm whitespace-nowrap">
-                          <thead className="bg-slate-900/80 text-slate-400 text-xs border-b border-slate-700/50 uppercase tracking-wider">
-                            <tr><th className="p-3">Cuota</th><th className="p-3">Fecha Pago</th><th className="p-3 text-right">Saldo Inicio</th><th className="p-3 text-right">Costos Asoc.</th><th className="p-3 text-right">Capital</th><th className="p-3 text-right">Interés</th><th className="p-3 text-right">Seguro</th><th className="p-3 text-right">Mora</th><th className="p-3 text-right">Ajuste</th><th className="p-3 text-right">Vr. Cuota</th><th className="p-3 text-right">Saldo Final</th><th className="p-3 text-center">Estado</th><th className="p-3 text-center">Acción</th></tr>
+                          <thead className="bg-slate-900/80 text-slate-400 text-[10px] border-b border-slate-700/50 uppercase tracking-wider">
+                            <tr><th className="px-2 py-2">No.</th><th className="px-2 py-2">Fecha</th><th className="px-2 py-2 text-right">Sdo. Inicio</th><th className="px-2 py-2 text-right">Costos</th><th className="px-2 py-2 text-right">Capital</th><th className="px-2 py-2 text-right">Interés</th><th className="px-2 py-2 text-right">Seguro</th><th className="px-2 py-2 text-right">Mora</th><th className="px-2 py-2 text-right">Ajuste</th><th className="px-2 py-2 text-right">Vr. Cuota</th><th className="px-2 py-2 text-right">Sdo. Final</th><th className="px-2 py-2 text-center">Estado</th><th className="px-2 py-2 text-center">Acción</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-700/50">
+                          <tbody className="divide-y divide-slate-700/50 text-xs">
                             {(()=>{
                               const refinanciacionAcumulada = Number(selectedLoan.refinanciacion_acumulada || 0);
 let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
