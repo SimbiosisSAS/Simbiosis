@@ -805,7 +805,11 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
                               const refinanciacionAcumulada = Number(selectedLoan.refinanciacion_acumulada || 0);
                               let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
                               let refinanciacionApplied = false;
-                              return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index,arr)=>{
+                              return loanInstallments.filter(i => {
+  if (i.status === 'PAID_EARLY') return false;
+  if (selectedLoan?.status === 'CASTIGADO' && i.status === 'PENDING') return false;
+  return true;
+}).map((inst,index,arr)=>{
                                 if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
                                   const prev = arr[index-1];
                                   if ((prev.status==='PAID'||prev.status==='LATE') && inst.status==='PENDING') { tempBal += refinanciacionAcumulada; refinanciacionApplied = true; }
