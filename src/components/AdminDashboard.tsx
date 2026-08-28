@@ -715,11 +715,21 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
   };
 
   const calculateCurrentBalance = () => {
-    if (!selectedLoan || loanInstallments.length === 0) return 0;
-    const cap = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
-    const pagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
-    return Math.max(cap - pagado, 0);
-  };
+  if (!selectedLoan || loanInstallments.length === 0) return 0;
+  const cap = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) 
+    + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
+  const pagado = loanInstallments
+    .filter(i => i.status === 'PAID' || i.status === 'LATE')
+    .reduce((s, i) => s + Number(i.principal_portion), 0);
+  const capitalPerdonado = loanInstallments
+    .filter(i => 
+      (i.status === 'PAID' || i.status === 'LATE') && 
+      i.ajuste_tipo === 'CAPITAL' && 
+      Number(i.ajuste_amount || 0) < 0
+    )
+    .reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
+  return Math.max(cap - pagado - capitalPerdonado, 0);
+};
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
