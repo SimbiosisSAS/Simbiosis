@@ -499,7 +499,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
   + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
   + Number(selectedLoan.refinanciacion_acumulada || 0);
     const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
-    let currentBalance = Math.max(capitalOriginal - capitalPagado, 0);
+    const capitalPerdonado = loanInstallments.filter(i => 
+      (i.status === 'PAID' || i.status === 'LATE') && 
+      i.ajuste_tipo === 'CAPITAL' && 
+      Number(i.ajuste_amount || 0) < 0
+    ).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
+    let currentBalance = Math.max(capitalOriginal - capitalPagado - capitalPerdonado, 0);
     if (currentBalance <= 0.5) { alert('El crédito ya está completamente saldado.'); return; }
     const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
     const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
