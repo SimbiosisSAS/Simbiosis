@@ -60,13 +60,19 @@ const installments = allInstallments;
 
       // ── MÉTRICAS BASE ─────────────────────────────────────────────────────
       const getLoanBalance = (loanId: string) => {
-        const loan = loans.find(l => l.id === loanId);
-        if (!loan) return 0;
-        if (loan.status === 'CASTIGADO') return Number(loan.castigo_monto || 0);
-        const principal = Number(loan.principal_amount || loan.loan_amount) + Number(loan.associated_costs || loan.origination_costs || 0);
-        const paid = installments.filter(i => i.loan_id === loanId && (i.status === 'PAID' || i.status === 'LATE')).reduce((s, i) => s + Number(i.principal_portion), 0);
-        return Math.max(principal - paid, 0);
-      };
+  const loan = loans.find(l => l.id === loanId);
+  if (!loan) return 0;
+  if (loan.status === 'CASTIGADO') return Number(loan.castigo_monto || 0);
+  const principal = Number(loan.principal_amount || loan.loan_amount) + Number(loan.associated_costs || loan.origination_costs || 0);
+  const loanInst = installments.filter(i => i.loan_id === loanId);
+  const paid = loanInst.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
+  const capitalPerdonado = loanInst.filter(i =>
+    (i.status === 'PAID' || i.status === 'LATE') &&
+    i.ajuste_tipo === 'CAPITAL' &&
+    Number(i.ajuste_amount || 0) < 0
+  ).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
+  return Math.max(principal - paid - capitalPerdonado, 0);
+};
 
       // Solo métricas de cartera ACTIVA
       const capitalColocado = activeLoans.reduce((s, l) => s + Number(l.principal_amount || l.loan_amount) + Number(l.associated_costs || l.origination_costs || 0), 0);
