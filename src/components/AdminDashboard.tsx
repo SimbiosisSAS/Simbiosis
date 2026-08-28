@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { CreditApplication } from '../types';
-import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp, XCircle, Phone, Archive  } from 'lucide-react';
+import { Eye, Sparkles, FileText, Calculator, LogOut, Wallet, DollarSign, Calendar, Download, Settings, Plus, Trash2, TrendingUp, XCircle, Phone, Archive } from 'lucide-react';
 import LoanOriginationEngine from './LoanOriginationEngine';
 import IndicadoresCartera from './IndicadoresCartera';
 import ReporteCarteraPDF from './ReporteCarteraPDF';
@@ -31,31 +31,28 @@ export default function AdminDashboard({ onLogout }: { onLogout?: () => void }) 
   const [carteraView, setCarteraView] = useState<'creditos' | 'indicadores'>('creditos');
   const [historialCliente, setHistorialCliente] = useState<any[]>([]);
   const [showLiquidados, setShowLiquidados] = useState(false);
+  const [showCastigados, setShowCastigados] = useState(false);
   const [showReversalModal, setShowReversalModal] = useState(false);
   const [installmentToRevert, setInstallmentToRevert] = useState<any | null>(null);
   const [showRestructuringModal, setShowRestructuringModal] = useState(false);
   const [showAjusteModal, setShowAjusteModal] = useState(false);
-const [showRefinanciarModal, setShowRefinanciarModal] = useState(false);
-const [refinanciarParams, setRefinanciarParams] = useState({
-  desembolsoAdicional: 0,
-  nuevaTasa: 0,
-  nuevaCuota: 0,
-  nuevoSeguro: 0,
-  nuevosPlazo: 0,
-  razon: '',
-});
-const [historialRefinanciaciones, setHistorialRefinanciaciones] = useState<any[]>([]);
+  const [showRefinanciarModal, setShowRefinanciarModal] = useState(false);
+  const [refinanciarParams, setRefinanciarParams] = useState({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
+  const [historialRefinanciaciones, setHistorialRefinanciaciones] = useState<any[]>([]);
   const [ajusteParams, setAjusteParams] = useState({ instalmentIds:[] as string[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', operacion:'DESCUENTO', valor:0, razon:'' });
   const [restructuringParams, setRestructuringParams] = useState({ nuevaTasa: 0, nuevosPlazo: 0, capitalizarMora: false });
   const [showNotifModal, setShowNotifModal] = useState(false);
-const [notifData, setNotifData] = useState({ phone: '', installment: null as any });
-const [sendingNotif, setSendingNotif] = useState(false);
+  const [notifData, setNotifData] = useState({ phone: '', installment: null as any });
+  const [sendingNotif, setSendingNotif] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [notificationPhone, setNotificationPhone] = useState('');
   const [notificationInstallment, setNotificationInstallment] = useState<any | null>(null);
   const [sendingNotification, setSendingNotification] = useState(false);
   const [showPazYSalvoModal, setShowPazYSalvoModal] = useState(false);
   const [pazYSalvoData, setPazYSalvoData] = useState<any>(null);
+  const [showCastigarModal, setShowCastigarModal] = useState(false);
+  const [castigarParams, setCastigarParams] = useState({ monto: 0, razon: '', fecha: new Date().toISOString().split('T')[0] });
+
 const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (obs: string) => void }) => {
   const [obs, setObs] = useState(app.admin_observaciones || '');
   const [saving, setSaving] = useState(false);
@@ -66,7 +63,6 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   const bar = ok ? 'bg-emerald-500' : rev ? 'bg-amber-500' : 'bg-red-500';
   const label = ok ? '✅ APROBADO' : rev ? '⚠️ REVISAR' : '❌ RECHAZAR';
   const razones = app.score_razones ? app.score_razones.split(' | ').filter(Boolean) : [];
-
   const handleSave = async () => {
     setSaving(true);
     await supabase.from('credit_applications').update({ admin_observaciones: obs }).eq('id', app.id);
@@ -74,7 +70,6 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
     if (onSaveObservacion) onSaveObservacion(obs);
     alert('Observación guardada');
   };
-
   return (
     <div className={`p-4 rounded-xl border mb-4 ${bg}`}>
       <div className="flex justify-between items-center mb-3">
@@ -97,37 +92,25 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
       {razones.length > 0 && (
         <div className="bg-slate-900/50 rounded-lg p-3 mb-3">
           <p className="text-xs font-bold text-slate-400 uppercase mb-2">⚠️ Alertas del sistema:</p>
-          {razones.map((r: string, i: number) => (
-            <p key={i} className="text-xs text-red-400 mb-1">• {r}</p>
-          ))}
+          {razones.map((r: string, i: number) => <p key={i} className="text-xs text-red-400 mb-1">• {r}</p>)}
         </div>
       )}
       <div>
         <p className="text-xs font-bold text-slate-400 uppercase mb-1">Observación del asesor:</p>
-        <textarea
-          value={obs}
-          onChange={e => setObs(e.target.value)}
-          placeholder="Escribe aquí tu análisis o decisión manual..."
-          className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-emerald-500 resize-none"
-          rows={3}
-        />
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="mt-1 w-full py-1.5 bg-slate-700 hover:bg-emerald-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition-colors"
-        >
-          {saving ? 'Guardando...' : 'Guardar Observación'}
-        </button>
+        <textarea value={obs} onChange={e => setObs(e.target.value)} placeholder="Escribe aquí tu análisis o decisión manual..." className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-emerald-500 resize-none" rows={3}/>
+        <button onClick={handleSave} disabled={saving} className="mt-1 w-full py-1.5 bg-slate-700 hover:bg-emerald-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition-colors">{saving ? 'Guardando...' : 'Guardar Observación'}</button>
       </div>
     </div>
   );
-};  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+};
+
+  const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   useEffect(() => {
     fetchUsuryRates();
     if (activeTab === 'solicitudes') fetchApplications();
     else if (activeTab === 'cartera') { fetchActiveLoans(showLiquidados); setSelectedLoan(null); }
-  }, [filterStatus, activeTab, showLiquidados]);
+  }, [filterStatus, activeTab, showLiquidados, showCastigados]);
 
   const fetchApplications = async () => {
     setLoading(true);
@@ -139,20 +122,21 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   };
 
   const fetchActiveLoans = async (includeLiquidados = false) => {
-  setLoading(true);
-  let query = supabase.from('active_loans').select('*');
-  if (!includeLiquidados) query = query.neq('status', 'LIQUIDADO');
-  const { data, error } = await query;
-  if (!error) {
-    const sorted = (data || []).sort((a, b) => {
-      const numA = parseInt(a.loan_number?.replace(/\D/g, '') || '0', 10);
-      const numB = parseInt(b.loan_number?.replace(/\D/g, '') || '0', 10);
-      return numA - numB;
-    });
-    setActiveLoans(sorted);
-  }
-  setLoading(false);
-};
+    setLoading(true);
+    let query = supabase.from('active_loans').select('*');
+    if (!includeLiquidados) query = query.neq('status', 'LIQUIDADO');
+    if (!showCastigados) query = query.neq('status', 'CASTIGADO');
+    const { data, error } = await query;
+    if (!error) {
+      const sorted = (data || []).sort((a, b) => {
+        const numA = parseInt(a.loan_number?.replace(/\D/g, '') || '0', 10);
+        const numB = parseInt(b.loan_number?.replace(/\D/g, '') || '0', 10);
+        return numA - numB;
+      });
+      setActiveLoans(sorted);
+    }
+    setLoading(false);
+  };
 
   const fetchInstallments = async (loanId: string) => {
     setLoading(true);
@@ -183,13 +167,13 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
   };
 
   const handleSelectLoan = async (loan: any) => {
-  const { data: freshLoan } = await supabase.from('active_loans').select('*').eq('id', loan.id).single();
-  setSelectedLoan(freshLoan || loan);
-  fetchInstallments(loan.id);
-  fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
-  setHistorialCliente([]);
-  fetchHistorialRefinanciaciones(loan.id);
-};
+    const { data: freshLoan } = await supabase.from('active_loans').select('*').eq('id', loan.id).single();
+    setSelectedLoan(freshLoan || loan);
+    fetchInstallments(loan.id);
+    fetchHistorialCliente(loan.client_id_number || loan.client_id, loan.id);
+    setHistorialCliente([]);
+    fetchHistorialRefinanciaciones(loan.id);
+  };
 
   const handleDeleteLoan = async () => {
     if (!selectedLoan || !window.confirm(`¿Eliminar el crédito de ${selectedLoan.client_name}? No se puede deshacer.`)) return;
@@ -199,185 +183,128 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
       alert('Crédito eliminado'); setSelectedLoan(null); fetchActiveLoans();
     } catch (err: any) { alert('Error: ' + err.message); }
   };
-const fetchHistorialRefinanciaciones = async (loanId: string) => {
-  const { data } = await supabase.from('loan_refinanciaciones').select('*').eq('loan_id', loanId).order('created_at', { ascending: false });
-  if (data) setHistorialRefinanciaciones(data);
-};
 
-const handleRefinanciar = async () => {
-  if (!selectedLoan) return;
-  const { desembolsoAdicional, nuevaTasa, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
-  if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa la nueva tasa.'); return; }
-  if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa el nuevo plazo.'); return; }
+  const fetchHistorialRefinanciaciones = async (loanId: string) => {
+    const { data } = await supabase.from('loan_refinanciaciones').select('*').eq('loan_id', loanId).order('created_at', { ascending: false });
+    if (data) setHistorialRefinanciaciones(data);
+  };
 
-  const saldoAnterior = calculateCurrentBalance();
-  const nuevoSaldo = saldoAnterior + desembolsoAdicional;
-  const rate = nuevaTasa / 100;
-  const netCuota = Math.round(nuevoSaldo * (rate * Math.pow(1+rate, nuevosPlazo)) / (Math.pow(1+rate, nuevosPlazo) - 1));
-  const nuevaCuota = netCuota + nuevoSeguro;
-
-  if (!window.confirm(`¿Confirmas la refinanciación de ${selectedLoan.client_name}?\n\nDesembolso adicional: ${formatCurrency(desembolsoAdicional)}\nNuevo saldo: ${formatCurrency(nuevoSaldo)}\nNueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses`)) return;
-
-  try {
-
-    // Cancelar cuotas pendientes
-    const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
-    for (const inst of pendientes) {
-      await supabase.from('loan_installments').update({ status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0 }).eq('id', inst.id);
-    }
-
-    // Número de cuota y fecha de inicio
-    const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
-    const primerasCanceladas = [...pendientes].sort((a,b) => a.installment_number - b.installment_number);
-let nextInstNumber = primerasCanceladas.length > 0 ? primerasCanceladas[0].installment_number : (todasOrdenadas[0]?.installment_number || 0) + 1;
-    let lastDate: Date;
-if (primerasCanceladas.length > 0) {
-  lastDate = new Date(primerasCanceladas[0].expected_payment_date + 'T00:00:00');
-  lastDate.setMonth(lastDate.getMonth() - 1);
-} else {
-  lastDate = new Date();
-}
-
-    // Crear nuevo plan
-    let startYear: number, startMonth: number, originalDay: number;
-    if (primerasCanceladas.length > 0) {
-      const d = new Date(primerasCanceladas[0].expected_payment_date + 'T00:00:00');
-      startYear = d.getFullYear(); startMonth = d.getMonth(); originalDay = d.getDate();
-    } else {
-      const d = new Date(); startYear = d.getFullYear(); startMonth = d.getMonth() + 1; originalDay = d.getDate();
-    }
-
-    let currentBalance = nuevoSaldo;
-    for (let i = 0; i < nuevosPlazo; i++) {
-      const targetMonth = (startMonth + i) % 12;
-      const targetYear = startYear + Math.floor((startMonth + i) / 12);
-      const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-      const targetDay = Math.min(originalDay, daysInMonth);
-      const nextDateStr = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(targetDay).padStart(2,'0')}`;
-
-      const interest = Math.round(currentBalance * rate);
-      let principal = Math.round(netCuota - interest);
-
-      if (principal >= currentBalance || i === nuevosPlazo - 1) {
-        principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').insert({
-          loan_id: selectedLoan.id, installment_number: nextInstNumber,
-          expected_payment_date: nextDateStr,
-          expected_amount: principal + interest + nuevoSeguro,
-          principal_portion: principal, interest_portion: interest,
-          insurance_portion: nuevoSeguro, status: 'PENDING',
-          actual_amount_paid: 0, late_fee_charged: 0,
-        });
-        currentBalance = 0; break;
+  const handleRefinanciar = async () => {
+    if (!selectedLoan) return;
+    const { desembolsoAdicional, nuevaTasa, nuevoSeguro, nuevosPlazo, razon } = refinanciarParams;
+    if (!nuevaTasa || nuevaTasa <= 0) { alert('Ingresa la nueva tasa.'); return; }
+    if (!nuevosPlazo || nuevosPlazo <= 0) { alert('Ingresa el nuevo plazo.'); return; }
+    const saldoAnterior = calculateCurrentBalance();
+    const nuevoSaldo = saldoAnterior + desembolsoAdicional;
+    const rate = nuevaTasa / 100;
+    const netCuota = Math.round(nuevoSaldo * (rate * Math.pow(1+rate, nuevosPlazo)) / (Math.pow(1+rate, nuevosPlazo) - 1));
+    const nuevaCuota = netCuota + nuevoSeguro;
+    if (!window.confirm(`¿Confirmas la refinanciación de ${selectedLoan.client_name}?\n\nDesembolso adicional: ${formatCurrency(desembolsoAdicional)}\nNuevo saldo: ${formatCurrency(nuevoSaldo)}\nNueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses`)) return;
+    try {
+      const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
+      for (const inst of pendientes) {
+        await supabase.from('loan_installments').update({ status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0 }).eq('id', inst.id);
       }
+      const primerasCanceladas = [...pendientes].sort((a,b) => a.installment_number - b.installment_number);
+      let nextInstNumber = primerasCanceladas.length > 0 ? primerasCanceladas[0].installment_number : ([...loanInstallments].sort((a, b) => b.installment_number - a.installment_number)[0]?.installment_number || 0) + 1;
+      let startYear: number, startMonth: number, originalDay: number;
+      if (primerasCanceladas.length > 0) {
+        const d = new Date(primerasCanceladas[0].expected_payment_date + 'T00:00:00');
+        startYear = d.getFullYear(); startMonth = d.getMonth(); originalDay = d.getDate();
+      } else {
+        const d = new Date(); startYear = d.getFullYear(); startMonth = d.getMonth() + 1; originalDay = d.getDate();
+      }
+      let currentBalance = nuevoSaldo;
+      for (let i = 0; i < nuevosPlazo; i++) {
+        const targetMonth = (startMonth + i) % 12;
+        const targetYear = startYear + Math.floor((startMonth + i) / 12);
+        const daysInMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+        const targetDay = Math.min(originalDay, daysInMonth);
+        const nextDateStr = `${targetYear}-${String(targetMonth+1).padStart(2,'0')}-${String(targetDay).padStart(2,'0')}`;
+        const interest = Math.round(currentBalance * rate);
+        let principal = Math.round(netCuota - interest);
+        if (principal >= currentBalance || i === nuevosPlazo - 1) {
+          principal = Math.round(currentBalance);
+          await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + nuevoSeguro, principal_portion: principal, interest_portion: interest, insurance_portion: nuevoSeguro, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+          currentBalance = 0; break;
+        }
+        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + nuevoSeguro, principal_portion: principal, interest_portion: interest, insurance_portion: nuevoSeguro, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+        currentBalance = Math.round(currentBalance - principal);
+        nextInstNumber++;
+      }
+      await supabase.from('active_loans').update({ interest_rate_monthly: nuevaTasa, fixed_quota_amount: netCuota, monthly_insurance: nuevoSeguro, refinanciacion_acumulada: Number(selectedLoan.refinanciacion_acumulada || 0) + desembolsoAdicional }).eq('id', selectedLoan.id);
+      await supabase.from('loan_refinanciaciones').insert({ loan_id: selectedLoan.id, fecha: new Date().toISOString().split('T')[0], desembolso_adicional: desembolsoAdicional, saldo_anterior: saldoAnterior, nueva_tasa: nuevaTasa, nuevo_seguro: nuevoSeguro, nueva_cuota: nuevaCuota, nuevo_plazo: nuevosPlazo, razon });
+      alert(`¡Refinanciación aplicada! Nuevo plan de ${nuevosPlazo} cuotas de ${formatCurrency(nuevaCuota)}`);
+      setShowRefinanciarModal(false);
+      setRefinanciarParams({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
+      await fetchInstallments(selectedLoan.id);
+      await fetchHistorialRefinanciaciones(selectedLoan.id);
+      const { data: updatedLoan } = await supabase.from('active_loans').select('*').eq('id', selectedLoan.id).single();
+      if (updatedLoan) setSelectedLoan(updatedLoan);
+      fetchActiveLoans();
+    } catch (err: any) { alert('Error en refinanciación: ' + err.message); }
+  };
 
-      await supabase.from('loan_installments').insert({
-        loan_id: selectedLoan.id, installment_number: nextInstNumber,
-        expected_payment_date: nextDateStr,
-        expected_amount: principal + interest + nuevoSeguro,
-        principal_portion: principal, interest_portion: interest,
-        insurance_portion: nuevoSeguro, status: 'PENDING',
-        actual_amount_paid: 0, late_fee_charged: 0,
-      });
-
-      currentBalance = Math.round(currentBalance - principal);
-      nextInstNumber++;
-    }
-
-    // Actualizar active_loans
-    await supabase.from('active_loans').update({
-      interest_rate_monthly: nuevaTasa,
-      fixed_quota_amount: netCuota,
-      monthly_insurance: nuevoSeguro,
-      refinanciacion_acumulada: Number(selectedLoan.refinanciacion_acumulada || 0) + desembolsoAdicional,
-    }).eq('id', selectedLoan.id);
-
-    // Guardar historial
-    await supabase.from('loan_refinanciaciones').insert({
-      loan_id: selectedLoan.id,
-      fecha: new Date().toISOString().split('T')[0],
-      desembolso_adicional: desembolsoAdicional,
-      saldo_anterior: saldoAnterior,
-      nueva_tasa: nuevaTasa,
-      nuevo_seguro: nuevoSeguro,
-      nueva_cuota: nuevaCuota,
-      nuevo_plazo: nuevosPlazo,
-      razon,
-    });
-
-    alert(`¡Refinanciación aplicada! Nuevo plan de ${nuevosPlazo} cuotas de ${formatCurrency(nuevaCuota)}`);
-    setShowRefinanciarModal(false);
-    setRefinanciarParams({ desembolsoAdicional: 0, nuevaTasa: 0, nuevaCuota: 0, nuevoSeguro: 0, nuevosPlazo: 0, razon: '' });
-    await fetchInstallments(selectedLoan.id);
-    await fetchHistorialRefinanciaciones(selectedLoan.id);
-    await fetchInstallments(selectedLoan.id);
-await fetchHistorialRefinanciaciones(selectedLoan.id);
-const { data: updatedLoan } = await supabase.from('active_loans').select('*').eq('id', selectedLoan.id).single();
-if (updatedLoan) setSelectedLoan(updatedLoan);
-fetchActiveLoans();
-  } catch (err: any) {
-    alert('Error en refinanciación: ' + err.message);
-  }
-};
   const handleAplicarAjuste = async () => {
-  if (!selectedLoan || ajusteParams.instalmentIds.length === 0) return;
-  if (!ajusteParams.razon.trim()) { alert('Ingresa una razón para el ajuste.'); return; }
-  if (!ajusteParams.valor || ajusteParams.valor <= 0) { alert('Ingresa un valor válido.'); return; }
-  const selected = loanInstallments.filter(i => ajusteParams.instalmentIds.includes(i.id));
-  const totalBase = selected.reduce((s, i) => s + Number(i.expected_amount), 0);
-  const totalAjuste = ajusteParams.tipoCalculo === 'PORCENTAJE' ? Math.round(totalBase * ajusteParams.valor / 100) : Math.round(ajusteParams.valor);
-  if (ajusteParams.operacion === 'DESCUENTO' && totalAjuste >= totalBase) { alert('El descuento no puede ser mayor o igual al total de las cuotas.'); return; }
-  if (!window.confirm(`¿Aplicar ajuste de ${formatCurrency(totalAjuste)} en ${selected.length} cuota(s)?\n\nRazón: ${ajusteParams.razon}`)) return;
-  try {
-    for (const inst of selected) {
-      const proporcion = Number(inst.expected_amount) / totalBase;
-      const ajusteEsta = Math.round(totalAjuste * proporcion);
-      const signedAjuste = ajusteParams.operacion === 'DESCUENTO' ? -ajusteEsta : ajusteEsta;
-      const nuevoMonto = Number(inst.expected_amount) + signedAjuste;
-
-      let nuevoPrincipal = Number(inst.principal_portion);
-      let nuevoInteres = Number(inst.interest_portion);
-
-      if (ajusteParams.tipoAjuste === 'CAPITAL') {
-        nuevoPrincipal = Math.max(0, nuevoPrincipal + signedAjuste);
-      } else if (ajusteParams.tipoAjuste === 'INTERES') {
-        nuevoInteres = Math.max(0, nuevoInteres + signedAjuste);
+    if (!selectedLoan || ajusteParams.instalmentIds.length === 0) return;
+    if (!ajusteParams.razon.trim()) { alert('Ingresa una razón para el ajuste.'); return; }
+    if (!ajusteParams.valor || ajusteParams.valor <= 0) { alert('Ingresa un valor válido.'); return; }
+    const selected = loanInstallments.filter(i => ajusteParams.instalmentIds.includes(i.id));
+    const totalBase = selected.reduce((s, i) => s + Number(i.expected_amount), 0);
+    const totalAjuste = ajusteParams.tipoCalculo === 'PORCENTAJE' ? Math.round(totalBase * ajusteParams.valor / 100) : Math.round(ajusteParams.valor);
+    if (ajusteParams.operacion === 'DESCUENTO' && totalAjuste >= totalBase) { alert('El descuento no puede ser mayor o igual al total de las cuotas.'); return; }
+    if (!window.confirm(`¿Aplicar ajuste de ${formatCurrency(totalAjuste)} en ${selected.length} cuota(s)?\n\nRazón: ${ajusteParams.razon}`)) return;
+    try {
+      for (const inst of selected) {
+        const proporcion = Number(inst.expected_amount) / totalBase;
+        const ajusteEsta = Math.round(totalAjuste * proporcion);
+        const signedAjuste = ajusteParams.operacion === 'DESCUENTO' ? -ajusteEsta : ajusteEsta;
+        const nuevoMonto = Number(inst.expected_amount) + signedAjuste;
+        let nuevoPrincipal = Number(inst.principal_portion);
+        let nuevoInteres = Number(inst.interest_portion);
+        if (ajusteParams.tipoAjuste === 'CAPITAL') nuevoPrincipal = Math.max(0, nuevoPrincipal + signedAjuste);
+        else if (ajusteParams.tipoAjuste === 'INTERES') nuevoInteres = Math.max(0, nuevoInteres + signedAjuste);
+        await supabase.from('loan_installments').update({ expected_amount: nuevoMonto, principal_portion: nuevoPrincipal, interest_portion: nuevoInteres, ajuste_amount: signedAjuste, ajuste_reason: ajusteParams.razon, ajuste_tipo: ajusteParams.tipoAjuste }).eq('id', inst.id);
       }
-      // Para TOTAL: capital e interés NO cambian, solo cambia expected_amount
+      alert(`¡Ajuste aplicado! Total: ${formatCurrency(totalAjuste)}`);
+      setShowAjusteModal(false);
+      setAjusteParams({ instalmentIds:[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', operacion:'DESCUENTO', valor:0, razon:'' });
+      await fetchInstallments(selectedLoan.id);
+    } catch (err: any) { alert('Error: ' + err.message); }
+  };
 
-      await supabase.from('loan_installments').update({
-        expected_amount: nuevoMonto,
-        principal_portion: nuevoPrincipal,
-        interest_portion: nuevoInteres,
-        ajuste_amount: signedAjuste,
-        ajuste_reason: ajusteParams.razon,
-ajuste_tipo: ajusteParams.tipoAjuste,
-      }).eq('id', inst.id);
-    }
-    alert(`¡Ajuste aplicado! Total: ${formatCurrency(totalAjuste)}`);
-    setShowAjusteModal(false);
-    setAjusteParams({ instalmentIds:[], tipoAjuste:'TOTAL', tipoCalculo:'MONTO', valor:0, razon:'' });
-    await fetchInstallments(selectedLoan.id);
-  } catch (err: any) { alert('Error: ' + err.message); }
-};
   const handleLiquidarCredito = async () => {
-  if (!selectedLoan) return;
-  const saldo = calculateCurrentBalance();
-  if (saldo > 0) {
-    alert(`Este crédito aún tiene un saldo de ${formatCurrency(saldo)}. Solo se puede liquidar cuando el saldo es $0.`);
-    return;
-  }
-  if (!window.confirm(`¿Marcar el crédito de ${selectedLoan.client_name} como LIQUIDADO? Quedará archivado y no aparecerá en la cartera activa.`)) return;
-  try {
-    const { error } = await supabase.from('active_loans').update({ status: 'LIQUIDADO' }).eq('id', selectedLoan.id);
-    if (error) throw error;
-    alert('Crédito marcado como liquidado y archivado.');
-    setSelectedLoan(null);
-    fetchActiveLoans();
-  } catch (err: any) {
-    alert('Error: ' + err.message);
-  }
-};
+    if (!selectedLoan) return;
+    const saldo = calculateCurrentBalance();
+    if (saldo > 0) { alert(`Este crédito aún tiene un saldo de ${formatCurrency(saldo)}. Solo se puede liquidar cuando el saldo es $0.`); return; }
+    if (!window.confirm(`¿Marcar el crédito de ${selectedLoan.client_name} como LIQUIDADO?`)) return;
+    try {
+      const { error } = await supabase.from('active_loans').update({ status: 'LIQUIDADO' }).eq('id', selectedLoan.id);
+      if (error) throw error;
+      alert('Crédito marcado como liquidado y archivado.');
+      setSelectedLoan(null); fetchActiveLoans();
+    } catch (err: any) { alert('Error: ' + err.message); }
+  };
+
+  const handleCastigarCredito = async () => {
+    if (!selectedLoan) return;
+    if (!castigarParams.razon.trim()) { alert('Ingresa una razón para el castigo.'); return; }
+    if (!castigarParams.monto || castigarParams.monto <= 0) { alert('Ingresa el monto incobrable.'); return; }
+    if (!window.confirm(`¿Marcar el crédito de ${selectedLoan.client_name} como CARTERA INCOBRABLE por ${formatCurrency(castigarParams.monto)}?`)) return;
+    try {
+      const pendientes = loanInstallments.filter(i => i.status === 'PENDING');
+      for (const inst of pendientes) {
+        await supabase.from('loan_installments').update({ status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0 }).eq('id', inst.id);
+      }
+      const { error } = await supabase.from('active_loans').update({ status: 'CASTIGADO', castigo_fecha: castigarParams.fecha, castigo_razon: castigarParams.razon, castigo_monto: castigarParams.monto }).eq('id', selectedLoan.id);
+      if (error) throw error;
+      alert('¡Crédito marcado como cartera incobrable!');
+      setShowCastigarModal(false);
+      setSelectedLoan(null);
+      fetchActiveLoans(showLiquidados);
+    } catch (err: any) { alert('Error: ' + err.message); }
+  };
+
   const updateStatus = async (appId: string, newStatus: string) => {
     try {
       const { error } = await supabase.from('credit_applications').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', appId);
@@ -445,7 +372,8 @@ ajuste_tipo: ajusteParams.tipoAjuste,
     const saldoPendiente = futureInstallments.reduce((sum, i) => sum + Number(i.principal_portion), 0);
     let newBalance = Math.max(saldoPendiente - excedenteCapital, 0);
     const rate = getLoanRate(selectedLoan, loanInstallments);
-    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }const insurance = Number(selectedLoan.monthly_insurance || 0);
+    if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
+    const insurance = Number(selectedLoan.monthly_insurance || 0);
     const updates: any[] = [];
     let currentBalance = newBalance;
     if (strategy === 'REDUCE_QUOTA') {
@@ -458,8 +386,7 @@ ajuste_tipo: ajusteParams.tipoAjuste,
         let principal = Math.round(newFixedQuota) - interest;
         if (principal >= currentBalance || i === futureInstallments.length - 1) principal = Math.round(currentBalance);
         if (principal < 0) principal = 0;
-        updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+        updates.push({ id: inst.id, expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
         currentBalance = Math.round(currentBalance - principal);
       }
     } else {
@@ -473,14 +400,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
         let principal = fixedQuota - interest;
         if (principal >= currentBalance) {
           principal = Math.round(currentBalance);
-          updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+          updates.push({ id: inst.id, expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
           currentBalance = 0; done = true; continue;
         }
         principal = Math.round(principal);
         currentBalance = Math.round(currentBalance - principal);
-        updates.push({ id: inst.id, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
+        updates.push({ id: inst.id, expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' });
       }
     }
     for (const u of updates) {
@@ -495,31 +420,19 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
     if (!rate || rate <= 0) { alert('Error: No se pudo determinar la tasa.'); return; }
     const fixedQuota = Number(selectedLoan.fixed_quota_amount);
     if (!fixedQuota || fixedQuota <= 0) { alert('Error: Cuota fija inválida.'); return; }
-    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount)
-  + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0)
-  + Number(selectedLoan.refinanciacion_acumulada || 0);
+    const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0) + Number(selectedLoan.refinanciacion_acumulada || 0);
     const capitalPagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
-    const capitalPerdonado = loanInstallments.filter(i => 
-      (i.status === 'PAID' || i.status === 'LATE') && 
-      i.ajuste_tipo === 'CAPITAL' && 
-      Number(i.ajuste_amount || 0) < 0
-    ).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
+    const capitalPerdonado = loanInstallments.filter(i => (i.status === 'PAID' || i.status === 'LATE') && i.ajuste_tipo === 'CAPITAL' && Number(i.ajuste_amount || 0) < 0).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
     let currentBalance = Math.max(capitalOriginal - capitalPagado - capitalPerdonado, 0);
     if (currentBalance <= 0.5) {
-  const pendientesAAnular = loanInstallments.filter(i => i.status === 'PENDING');
-  if (pendientesAAnular.length === 0) {
-    alert('El crédito ya está completamente saldado.');
-    return;
-  }
-  for (const inst of pendientesAAnular) {
-    await supabase.from('loan_installments').update({
-      status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0
-    }).eq('id', inst.id);
-  }
-  alert('¡Crédito saldado! Las cuotas pendientes fueron anuladas.');
-  await fetchInstallments(selectedLoan.id);
-  return;
-}
+      const pendientesAAnular = loanInstallments.filter(i => i.status === 'PENDING');
+      if (pendientesAAnular.length === 0) { alert('El crédito ya está completamente saldado.'); return; }
+      for (const inst of pendientesAAnular) {
+        await supabase.from('loan_installments').update({ status: 'PAID_EARLY', expected_amount: 0, principal_portion: 0, interest_portion: 0 }).eq('id', inst.id);
+      }
+      alert('¡Crédito saldado! Las cuotas pendientes fueron anuladas.');
+      await fetchInstallments(selectedLoan.id); return;
+    }
     const pending = loanInstallments.filter(i => i.status === 'PENDING').sort((a, b) => a.installment_number - b.installment_number);
     const todasOrdenadas = [...loanInstallments].sort((a, b) => b.installment_number - a.installment_number);
     const ultimaCuota = todasOrdenadas[0];
@@ -530,10 +443,8 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       const inst = pending[i];
       if (currentBalance <= 0.5) { await supabase.from('loan_installments').update({ expected_amount: 0, principal_portion: 0, interest_portion: 0, status: 'PAID_EARLY' }).eq('id', inst.id); continue; }
       const interest = Math.round(currentBalance * rate);
-      let principal = fixedQuota - interest;
-      principal = Math.round(principal);
-      await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
+      let principal = Math.round(fixedQuota - interest);
+      await supabase.from('loan_installments').update({ expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING' }).eq('id', inst.id);
       currentBalance = Math.round(currentBalance - principal);
       lastDate = new Date(inst.expected_payment_date); nextInstNumber = inst.installment_number + 1;
     }
@@ -544,13 +455,11 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       let principal = fixedQuota - interest;
       if (principal >= currentBalance) {
         principal = Math.round(currentBalance);
-        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = 0; break;
       }
       principal = Math.round(principal);
-      await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+      await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: nextDateStr, expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
       currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
     }
     alert('¡Plan recalculado correctamente!');
@@ -580,14 +489,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
     if (!selectedLoan || loanInstallments.length === 0) return;
     const capitalOriginal = Number(selectedLoan.principal_amount || selectedLoan.loan_amount);
     let saldoTemp = capitalOriginal + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
-    const filas = loanInstallments.filter(i => i.status !== 'PAID_EARLY').map((inst, index, arr) => {
-if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
-  const prev = arr[index-1];
-  if ((prev.status==='PAID'||prev.status==='LATE') && inst.status==='PENDING') {
-    tempBal += refinanciacionAcumulada;
-    refinanciacionApplied = true;
-  }
-}
+    const filas = loanInstallments.filter(i => i.status !== 'PAID_EARLY').map((inst, index) => {
       const saldoInicio = saldoTemp;
       const capital = Number(inst.principal_portion);
       let saldoFinal = Math.max(saldoInicio - capital, 0);
@@ -606,9 +508,7 @@ if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
     const totalPagado = loanInstallments.filter(i=>i.status==='PAID'||i.status==='LATE').reduce((s,i)=>s+Number(i.actual_amount_paid||0),0);
     const saldoVivo = calculateCurrentBalance();
     const hoyDocStr = new Date().toISOString().split('T')[0];
-    const totalMoras = loanInstallments.reduce((s,i)=>{
-      if(i.status==='PENDING'){const f=new Date(i.expected_payment_date);f.setHours(0,0,0,0);const h=new Date();h.setHours(0,0,0,0);if(f<h){const m=calculateLateFee(i.expected_payment_date,hoyDocStr,Number(i.expected_amount));return s+m.penalty;}} return s+Number(i.late_fee_charged||0);
-    },0);
+    const totalMoras = loanInstallments.reduce((s,i)=>{ if(i.status==='PENDING'){const f=new Date(i.expected_payment_date);f.setHours(0,0,0,0);const h=new Date();h.setHours(0,0,0,0);if(f<h){const m=calculateLateFee(i.expected_payment_date,hoyDocStr,Number(i.expected_amount));return s+m.penalty;}} return s+Number(i.late_fee_charged||0); },0);
     const hoyDocDate = new Date(); hoyDocDate.setHours(0,0,0,0);
     const cuotasVencidas = loanInstallments.filter(i=>{if(i.status!=='PENDING')return false;const f=new Date(i.expected_payment_date);f.setHours(0,0,0,0);return f<hoyDocDate;});
     const cuotasFuturas = loanInstallments.filter(i=>{if(i.status!=='PENDING')return false;const f=new Date(i.expected_payment_date);f.setHours(0,0,0,0);return f>=hoyDocDate;});
@@ -616,43 +516,26 @@ if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
     const totalCuotasFuturas = cuotasFuturas.reduce((s,i)=>s+Number(i.expected_amount),0);
     const totalARegularizar = totalCuotasVencidas + totalMoras;
     const totalDeudaHoy = totalARegularizar + totalCuotasFuturas;
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>Estado de Cuenta - ${selectedLoan.client_name}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#111827;padding:32px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:2px solid #059669;padding-bottom:16px}.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}.info-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px}.info-label{font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px}.info-value{font-size:15px;font-weight:bold;color:#111827}.info-value.green{color:#059669}.info-value.red{color:#dc2626}table{width:100%;border-collapse:collapse;font-size:11px}thead{background:#059669;color:white}th{padding:8px;text-align:right;white-space:nowrap}th:first-child,th:nth-child(2){text-align:left}tbody tr:nth-child(even){background:#f9fafb}.summary{margin-top:24px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.summary-card{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px}.footer{margin-top:32px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#9ca3af;text-align:center}@media print{body{padding:16px}button{display:none}}</style></head><body>
-    <div class="header"><div><div style="font-size:30px;font-weight:900;font-family:Arial,sans-serif;background:linear-gradient(to right,#ef4444,#f97316,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">SIMBIOSIS</div><div style="font-size:11px;color:#9ca3af;letter-spacing:2px;margin-top:2px">conoce, invierte, crece</div></div><div style="text-align:right"><h2 style="font-size:16px;margin-bottom:4px">Estado de Cuenta</h2><p style="color:#6b7280;font-size:12px">Fecha de corte: ${new Date().toLocaleDateString('es-CO')}</p><button onclick="window.print()" style="margin-top:8px;padding:6px 16px;background:#059669;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px">Imprimir / Guardar PDF</button></div></div>
-    <div class="info-grid"><div class="info-card"><div class="info-label">Cliente</div><div class="info-value">${selectedLoan.client_name}</div><div style="font-size:11px;color:#6b7280">ID: ${selectedLoan.client_id_number||selectedLoan.client_id}</div></div><div class="info-card"><div class="info-label">Capital Original</div><div class="info-value">$ ${capitalOriginal.toLocaleString('es-CO')}</div></div><div class="info-card"><div class="info-label">Saldo Vivo Actual</div><div class="info-value ${saldoVivo>0?'red':'green'}">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div></div><div class="info-card"><div class="info-label">Fecha Desembolso</div><div class="info-value">${new Date(selectedLoan.disbursement_date).toLocaleDateString('es-CO')}</div></div><div class="info-card"><div class="info-label">Tasa Nominal MV</div><div class="info-value">${selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??'--'}%</div></div><div class="info-card"><div class="info-label">Cuotas Pagadas</div><div class="info-value green">${loanInstallments.filter(i=>i.status==='PAID'||i.status==='LATE').length} de ${loanInstallments.filter(i=>i.status!=='PAID_EARLY').length}</div></div></div>
-    <table><thead><tr><th style="text-align:center">No.</th><th style="text-align:left">Fecha</th><th>Saldo Inicio</th><th>Costos</th><th>Capital</th><th>Interés</th><th>Mora</th><th>Vr. Cuota</th><th>Saldo Final</th><th>Estado</th><th>Pagado</th></tr></thead><tbody>${filas}</tbody></table>
-    <div class="summary"><div class="summary-card"><div class="info-label">Total Intereses</div><div class="info-value">$ ${Math.round(totalIntereses).toLocaleString('es-CO')}</div></div><div class="summary-card"><div class="info-label">Total Moras</div><div class="info-value red">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</div></div><div class="summary-card"><div class="info-label">Total Pagado</div><div class="info-value green">$ ${Math.round(totalPagado).toLocaleString('es-CO')}</div></div><div class="summary-card" style="background:#fff7ed;border-color:#fed7aa"><div class="info-label">Saldo Pendiente</div><div class="info-value" style="color:#c2410c">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div></div></div>
-    <div style="margin-top:24px;border:2px solid #dc2626;border-radius:8px;overflow:hidden"><div style="background:#dc2626;padding:10px 16px"><p style="color:white;font-weight:bold;font-size:13px;margin:0">Resumen de Deuda a la Fecha — ${new Date().toLocaleDateString('es-CO')}</p></div><div style="padding:16px;background:#fff5f5"><table style="width:100%;font-size:12px;border-collapse:collapse"><tr style="border-bottom:1px solid #fecaca"><td style="padding:8px 4px;color:#374151">Cuotas vencidas sin pagar (${cuotasVencidas.length})</td><td style="padding:8px 4px;text-align:right;font-weight:bold;color:#dc2626">$ ${Math.round(totalCuotasVencidas).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:1px solid #fecaca"><td style="padding:8px 4px;color:#374151">Mora acumulada</td><td style="padding:8px 4px;text-align:right;font-weight:bold;color:#dc2626">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:2px solid #dc2626;background:#fee2e2"><td style="padding:10px 4px;font-weight:bold;color:#991b1b">TOTAL A REGULARIZAR HOY</td><td style="padding:10px 4px;text-align:right;font-weight:bold;font-size:15px;color:#991b1b">$ ${Math.round(totalARegularizar).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px 4px;color:#6b7280">Cuotas futuras pendientes (${cuotasFuturas.length})</td><td style="padding:8px 4px;text-align:right;color:#6b7280">$ ${Math.round(totalCuotasFuturas).toLocaleString('es-CO')}</td></tr><tr style="background:#f0fdf4"><td style="padding:10px 4px;font-weight:bold;color:#065f46">DEUDA TOTAL DEL CRÉDITO</td><td style="padding:10px 4px;text-align:right;font-weight:bold;font-size:15px;color:#065f46">$ ${Math.round(totalDeudaHoy).toLocaleString('es-CO')}</td></tr></table></div></div>
-    <div class="footer">Documento generado el ${new Date().toLocaleDateString('es-CO')} a las ${new Date().toLocaleTimeString('es-CO')} — Simbiosis Loan Management System</div>
-    </body></html>`;
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>Estado de Cuenta - ${selectedLoan.client_name}</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#111827;padding:32px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;border-bottom:2px solid #059669;padding-bottom:16px}.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}.info-card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px}.info-label{font-size:10px;text-transform:uppercase;color:#6b7280;margin-bottom:4px}.info-value{font-size:15px;font-weight:bold;color:#111827}.info-value.green{color:#059669}.info-value.red{color:#dc2626}table{width:100%;border-collapse:collapse;font-size:11px}thead{background:#059669;color:white}th{padding:8px;text-align:right;white-space:nowrap}th:first-child,th:nth-child(2){text-align:left}tbody tr:nth-child(even){background:#f9fafb}.summary{margin-top:24px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.summary-card{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px}.footer{margin-top:32px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:11px;color:#9ca3af;text-align:center}@media print{body{padding:16px}button{display:none}}</style></head><body><div class="header"><div><div style="font-size:30px;font-weight:900;font-family:Arial,sans-serif;background:linear-gradient(to right,#ef4444,#f97316,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1">SIMBIOSIS</div><div style="font-size:11px;color:#9ca3af;letter-spacing:2px;margin-top:2px">conoce, invierte, crece</div></div><div style="text-align:right"><h2 style="font-size:16px;margin-bottom:4px">Estado de Cuenta</h2><p style="color:#6b7280;font-size:12px">Fecha de corte: ${new Date().toLocaleDateString('es-CO')}</p><button onclick="window.print()" style="margin-top:8px;padding:6px 16px;background:#059669;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px">Imprimir / Guardar PDF</button></div></div><div class="info-grid"><div class="info-card"><div class="info-label">Cliente</div><div class="info-value">${selectedLoan.client_name}</div><div style="font-size:11px;color:#6b7280">ID: ${selectedLoan.client_id_number||selectedLoan.client_id}</div></div><div class="info-card"><div class="info-label">Capital Original</div><div class="info-value">$ ${capitalOriginal.toLocaleString('es-CO')}</div></div><div class="info-card"><div class="info-label">Saldo Vivo Actual</div><div class="info-value ${saldoVivo>0?'red':'green'}">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div></div><div class="info-card"><div class="info-label">Fecha Desembolso</div><div class="info-value">${new Date(selectedLoan.disbursement_date).toLocaleDateString('es-CO')}</div></div><div class="info-card"><div class="info-label">Tasa Nominal MV</div><div class="info-value">${selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??'--'}%</div></div><div class="info-card"><div class="info-label">Cuotas Pagadas</div><div class="info-value green">${loanInstallments.filter(i=>i.status==='PAID'||i.status==='LATE').length} de ${loanInstallments.filter(i=>i.status!=='PAID_EARLY').length}</div></div></div><table><thead><tr><th style="text-align:center">No.</th><th style="text-align:left">Fecha</th><th>Saldo Inicio</th><th>Costos</th><th>Capital</th><th>Interés</th><th>Mora</th><th>Vr. Cuota</th><th>Saldo Final</th><th>Estado</th><th>Pagado</th></tr></thead><tbody>${filas}</tbody></table><div class="summary"><div class="summary-card"><div class="info-label">Total Intereses</div><div class="info-value">$ ${Math.round(totalIntereses).toLocaleString('es-CO')}</div></div><div class="summary-card"><div class="info-label">Total Moras</div><div class="info-value red">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</div></div><div class="summary-card"><div class="info-label">Total Pagado</div><div class="info-value green">$ ${Math.round(totalPagado).toLocaleString('es-CO')}</div></div><div class="summary-card" style="background:#fff7ed;border-color:#fed7aa"><div class="info-label">Saldo Pendiente</div><div class="info-value" style="color:#c2410c">$ ${Math.round(saldoVivo).toLocaleString('es-CO')}</div></div></div><div style="margin-top:24px;border:2px solid #dc2626;border-radius:8px;overflow:hidden"><div style="background:#dc2626;padding:10px 16px"><p style="color:white;font-weight:bold;font-size:13px;margin:0">Resumen de Deuda a la Fecha — ${new Date().toLocaleDateString('es-CO')}</p></div><div style="padding:16px;background:#fff5f5"><table style="width:100%;font-size:12px;border-collapse:collapse"><tr style="border-bottom:1px solid #fecaca"><td style="padding:8px 4px;color:#374151">Cuotas vencidas sin pagar (${cuotasVencidas.length})</td><td style="padding:8px 4px;text-align:right;font-weight:bold;color:#dc2626">$ ${Math.round(totalCuotasVencidas).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:1px solid #fecaca"><td style="padding:8px 4px;color:#374151">Mora acumulada</td><td style="padding:8px 4px;text-align:right;font-weight:bold;color:#dc2626">$ ${Math.round(totalMoras).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:2px solid #dc2626;background:#fee2e2"><td style="padding:10px 4px;font-weight:bold;color:#991b1b">TOTAL A REGULARIZAR HOY</td><td style="padding:10px 4px;text-align:right;font-weight:bold;font-size:15px;color:#991b1b">$ ${Math.round(totalARegularizar).toLocaleString('es-CO')}</td></tr><tr style="border-bottom:1px solid #e5e7eb"><td style="padding:8px 4px;color:#6b7280">Cuotas futuras pendientes (${cuotasFuturas.length})</td><td style="padding:8px 4px;text-align:right;color:#6b7280">$ ${Math.round(totalCuotasFuturas).toLocaleString('es-CO')}</td></tr><tr style="background:#f0fdf4"><td style="padding:10px 4px;font-weight:bold;color:#065f46">DEUDA TOTAL DEL CRÉDITO</td><td style="padding:10px 4px;text-align:right;font-weight:bold;font-size:15px;color:#065f46">$ ${Math.round(totalDeudaHoy).toLocaleString('es-CO')}</td></tr></table></div></div><div class="footer">Documento generado el ${new Date().toLocaleDateString('es-CO')} a las ${new Date().toLocaleTimeString('es-CO')} — Simbiosis Loan Management System</div></body></html>`;
     const ventana = window.open('','_blank','width=1100,height=800');
     if(ventana){ventana.document.write(html);ventana.document.close();}
   };
-const handleEnviarNotificacion = async () => {
-  if (!notifData.phone || !notifData.installment || !selectedLoan) return;
-  setSendingNotif(true);
-  try {
-    const phone = notifData.phone.replace(/\s+/g, '').replace(/^0+/, '');
-    const monto = Number(notifData.installment.expected_amount).toLocaleString('es-CO');
-    const fecha = new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO', {
-      day: 'numeric', month: 'long', year: 'numeric'
-    });
-    const { error } = await supabase.functions.invoke('send-whatsapp', {
-      body: {
-        to: phone.startsWith('+') ? phone : `+57${phone}`,
-        clientName: selectedLoan.client_name,
-        monto,
-        fechaVencimiento: fecha,
-      }
-    });
-    if (error) throw error;
-    alert(`✅ Notificación enviada a ${notifData.phone}`);
-    setShowNotifModal(false);
-  } catch (err: any) {
-    alert('Error al enviar: ' + err.message);
-  } finally {
-    setSendingNotif(false);
-  }
-};
+
+  const handleEnviarNotificacion = async () => {
+    if (!notifData.phone || !notifData.installment || !selectedLoan) return;
+    setSendingNotif(true);
+    try {
+      const phone = notifData.phone.replace(/\s+/g, '').replace(/^0+/, '');
+      const monto = Number(notifData.installment.expected_amount).toLocaleString('es-CO');
+      const fecha = new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+      const { error } = await supabase.functions.invoke('send-whatsapp', { body: { to: phone.startsWith('+') ? phone : `+57${phone}`, clientName: selectedLoan.client_name, monto, fechaVencimiento: fecha } });
+      if (error) throw error;
+      alert(`✅ Notificación enviada a ${notifData.phone}`);
+      setShowNotifModal(false);
+    } catch (err: any) { alert('Error al enviar: ' + err.message); }
+    finally { setSendingNotif(false); }
+  };
+
   const handleReversarPago = async () => {
     if (!installmentToRevert || !selectedLoan) return;
     try {
@@ -676,10 +559,7 @@ const handleEnviarNotificacion = async () => {
       let nuevoSaldo = calculateCurrentBalance();
       if (restructuringParams.capitalizarMora) {
         const hoyStr = new Date().toISOString().split('T')[0];
-        const moraAcumulada = loanInstallments.reduce((s, i) => {
-          if (i.status === 'PENDING') { const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0); const h = new Date(); h.setHours(0,0,0,0); if (f < h) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return s + m.penalty; } }
-          return s + Number(i.late_fee_charged || 0);
-        }, 0);
+        const moraAcumulada = loanInstallments.reduce((s, i) => { if (i.status === 'PENDING') { const f = new Date(i.expected_payment_date); f.setHours(0,0,0,0); const h = new Date(); h.setHours(0,0,0,0); if (f < h) { const m = calculateLateFee(i.expected_payment_date, hoyStr, Number(i.expected_amount)); return s + m.penalty; } } return s + Number(i.late_fee_charged || 0); }, 0);
         nuevoSaldo += moraAcumulada;
       }
       const nuevaCuota = Math.round(nuevoSaldo * (nuevaTasa * Math.pow(1 + nuevaTasa, nuevosPlazo)) / (Math.pow(1 + nuevaTasa, nuevosPlazo) - 1));
@@ -689,14 +569,14 @@ const handleEnviarNotificacion = async () => {
       let nextInstNumber = ultimaCuota.installment_number + 1;
       let lastDate = new Date(ultimaCuota.expected_payment_date);
       let currentBalance = nuevoSaldo;
+      const insurance = Number(selectedLoan.monthly_insurance || 0);
       for (let i = 0; i < nuevosPlazo; i++) {
         lastDate = new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, lastDate.getDate());
         const interest = Math.round(currentBalance * nuevaTasa);
         let principal = nuevaCuota - interest;
         if (principal >= currentBalance || i === nuevosPlazo - 1) principal = Math.round(currentBalance);
         principal = Math.round(principal);
-        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: lastDate.toISOString().split('T')[0], expected_amount: principal + interest + insurance,
-insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
+        await supabase.from('loan_installments').insert({ loan_id: selectedLoan.id, installment_number: nextInstNumber, expected_payment_date: lastDate.toISOString().split('T')[0], expected_amount: principal + interest + insurance, insurance_portion: insurance, principal_portion: principal, interest_portion: interest, status: 'PENDING', actual_amount_paid: 0, late_fee_charged: 0 });
         currentBalance = Math.round(currentBalance - principal); nextInstNumber++;
       }
       await supabase.from('active_loans').update({ interest_rate_monthly: restructuringParams.nuevaTasa, fixed_quota_amount: nuevaCuota, installments: nuevosPlazo }).eq('id', selectedLoan.id);
@@ -705,7 +585,6 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
       alert(`¡Crédito reestructurado! Nueva cuota: ${formatCurrency(nuevaCuota)} por ${nuevosPlazo} meses.`);
     } catch (err: any) { alert('Error en reestructuración: ' + err.message); }
   };
-
 
   const handleRegisterPayment = async () => {
     if (!selectedInstallment || !selectedLoan) return;
@@ -734,21 +613,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
   };
 
   const calculateCurrentBalance = () => {
-  if (!selectedLoan || loanInstallments.length === 0) return 0;
-  const cap = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) 
-    + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
-  const pagado = loanInstallments
-    .filter(i => i.status === 'PAID' || i.status === 'LATE')
-    .reduce((s, i) => s + Number(i.principal_portion), 0);
-  const capitalPerdonado = loanInstallments
-    .filter(i => 
-      (i.status === 'PAID' || i.status === 'LATE') && 
-      i.ajuste_tipo === 'CAPITAL' && 
-      Number(i.ajuste_amount || 0) < 0
-    )
-    .reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
-  return Math.max(cap - pagado - capitalPerdonado, 0);
-};
+    if (!selectedLoan || loanInstallments.length === 0) return 0;
+    const cap = Number(selectedLoan.principal_amount || selectedLoan.loan_amount) + Number(selectedLoan.associated_costs || selectedLoan.origination_costs || 0);
+    const pagado = loanInstallments.filter(i => i.status === 'PAID' || i.status === 'LATE').reduce((s, i) => s + Number(i.principal_portion), 0);
+    const capitalPerdonado = loanInstallments.filter(i => (i.status === 'PAID' || i.status === 'LATE') && i.ajuste_tipo === 'CAPITAL' && Number(i.ajuste_amount || 0) < 0).reduce((s, i) => s + Math.abs(Number(i.ajuste_amount || 0)), 0);
+    return Math.max(cap - pagado - capitalPerdonado, 0);
+  };
 
   const exportToCSV = () => {
     if (!selectedLoan || loanInstallments.length === 0) return;
@@ -768,7 +638,12 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
   const formatCurrency = (val: any) => { const n = Number(val); return isNaN(n) ? '$ 0' : '$ ' + n.toLocaleString('es-CO'); };
 
   const getStatusBadge = (status: string) => {
-    const map: any = { PAID: ['bg-emerald-500/10 text-emerald-400 border-emerald-500/20','Al día'], LATE: ['bg-red-500/10 text-red-400 border-red-500/20','Mora'], PAID_EARLY: ['bg-slate-500/10 text-slate-400 border-slate-500/20','Anulada'] };
+    const map: any = {
+      PAID: ['bg-emerald-500/10 text-emerald-400 border-emerald-500/20','Al día'],
+      LATE: ['bg-red-500/10 text-red-400 border-red-500/20','Mora'],
+      PAID_EARLY: ['bg-slate-500/10 text-slate-400 border-slate-500/20','Anulada'],
+      CASTIGADO: ['bg-rose-500/10 text-rose-400 border-rose-500/20','Castigado'],
+    };
     const [cls, label] = map[status] || ['bg-amber-500/10 text-amber-400 border-amber-500/20','Pendiente'];
     return <span className={`px-2 py-1 ${cls} border rounded-full text-xs font-semibold`}>{label}</span>;
   };
@@ -817,22 +692,20 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
         {activeTab==='cartera' && (
           <div className="space-y-6">
             <div className="flex items-center justify-between w-full">
-  <div className="flex gap-2 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1 w-fit">
-  <div className="flex items-center gap-2">
-  <ReporteProvisionesPDF />
-  <div className="flex items-center gap-2">
-  <button
-  onClick={() => setShowLiquidados(!showLiquidados)}
-  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showLiquidados ? 'bg-slate-600 text-white border-slate-500' : 'bg-slate-800/40 text-slate-300 border-slate-600/50 hover:text-white hover:border-slate-400'}`}
->
-  <Archive size={14} /> {showLiquidados ? 'Ocultar Liquidados' : 'Ver Liquidados'}
-</button>
-  <ReporteCarteraPDF />
-</div>
-</div>
-</div>
-              <button onClick={()=>setCarteraView('creditos')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='creditos'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><Wallet className="w-4 h-4"/>Créditos</button>
-              <button onClick={()=>{setCarteraView('indicadores');setSelectedLoan(null);}} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='indicadores'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><TrendingUp className="w-4 h-4"/>Indicadores</button>
+              <div className="flex items-center gap-2">
+                <ReporteProvisionesPDF />
+                <button onClick={() => setShowLiquidados(!showLiquidados)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showLiquidados ? 'bg-slate-600 text-white border-slate-500' : 'bg-slate-800/40 text-slate-300 border-slate-600/50 hover:text-white hover:border-slate-400'}`}>
+                  <Archive size={14} /> {showLiquidados ? 'Ocultar Liquidados' : 'Ver Liquidados'}
+                </button>
+                <button onClick={() => setShowCastigados(!showCastigados)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${showCastigados ? 'bg-rose-700 text-white border-rose-600' : 'bg-slate-800/40 text-rose-400 border-rose-900/50 hover:text-white hover:border-rose-700'}`}>
+                  ⚠️ {showCastigados ? 'Ocultar Castigados' : 'Ver Castigados'}
+                </button>
+                <ReporteCarteraPDF />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={()=>setCarteraView('creditos')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='creditos'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><Wallet className="w-4 h-4"/>Créditos</button>
+                <button onClick={()=>{setCarteraView('indicadores');setSelectedLoan(null);}} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${carteraView==='indicadores'?'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30':'text-slate-400 hover:text-slate-200'}`}><TrendingUp className="w-4 h-4"/>Indicadores</button>
+              </div>
             </div>
 
             {carteraView==='indicadores' && <IndicadoresCartera/>}
@@ -847,18 +720,15 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                   <div className="overflow-x-auto">
                     <table className="w-full text-left"><thead className="bg-slate-900/50 text-slate-400 text-xs uppercase border-b border-slate-700/50"><tr><th className="p-4">Cliente</th><th className="p-4 text-right">Monto</th>{!selectedLoan&&<th className="p-4 text-center">Detalle</th>}</tr></thead>
                     <tbody className="divide-y divide-slate-700/50">{activeLoans.map(loan=>(
-                      <tr key={loan.id} onClick={()=>handleSelectLoan(loan)} className={`cursor-pointer transition-colors ${selectedLoan?.id===loan.id?'bg-emerald-500/10 border-l-4 border-emerald-500':'hover:bg-slate-700/20'}`}>
+                      <tr key={loan.id} onClick={()=>handleSelectLoan(loan)} className={`cursor-pointer transition-colors ${selectedLoan?.id===loan.id?'bg-emerald-500/10 border-l-4 border-emerald-500':loan.status==='CASTIGADO'?'bg-rose-900/10 hover:bg-rose-900/20':loan.status==='LIQUIDADO'?'bg-slate-800/30 hover:bg-slate-700/30':'hover:bg-slate-700/20'}`}>
                         <td className="p-4">
-  <div className="flex items-center gap-2 mb-0.5">
-    {loan.loan_number && (
-      <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded px-1.5 py-0.5 font-mono font-bold shrink-0">
-        #{loan.loan_number}
-      </span>
-    )}
-    <p className="font-bold text-slate-200 text-sm truncate">{loan.client_name}</p>
-  </div>
-  <p className="text-xs text-slate-500 font-mono">{loan.client_id_number||loan.client_id}</p>
-</td>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            {loan.loan_number && <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded px-1.5 py-0.5 font-mono font-bold shrink-0">#{loan.loan_number}</span>}
+                            {loan.status==='CASTIGADO' && <span className="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded px-1.5 py-0.5 font-bold shrink-0">⚠️ Castigado</span>}
+                            <p className="font-bold text-slate-200 text-sm truncate">{loan.client_name}</p>
+                          </div>
+                          <p className="text-xs text-slate-500 font-mono">{loan.client_id_number||loan.client_id}</p>
+                        </td>
                         <td className="p-4 text-sm font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(loan.principal_amount||loan.loan_amount)}</td>
                         {!selectedLoan&&<td className="p-4 text-center"><button className="p-2 text-slate-400 hover:text-emerald-400 bg-slate-800 rounded-lg"><Eye size={16}/></button></td>}
                       </tr>
@@ -867,32 +737,36 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                 </div>
 
                 {selectedLoan && (
-  <div className="lg:col-span-3 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
-    <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
-      <div><h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2><p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p></div>
-      <div className="flex gap-2 flex-wrap">
-        <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
-        <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
-        <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
-        <button
-  onClick={()=>{
-    setRefinanciarParams({desembolsoAdicional:0,nuevaTasa:Number(selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??0),nuevaCuota:Number(selectedLoan.fixed_quota_amount||0)+Number(selectedLoan.monthly_insurance||0),nuevoSeguro:Number(selectedLoan.monthly_insurance||0),nuevosPlazo:12,razon:''});
-    fetchHistorialRefinanciaciones(selectedLoan.id);
-    setShowRefinanciarModal(true);
-  }}
-  className="text-violet-400 hover:text-white px-3 py-1.5 bg-violet-900/20 hover:bg-violet-600 rounded-lg text-sm border border-violet-900/50 transition-colors flex items-center gap-1"
->
-  <TrendingUp size={14}/> Refinanciar
-</button>
-        <button onClick={()=>{setAjusteParams({instalmentIds:[],tipoAjuste:'TOTAL',tipoCalculo:'MONTO',operacion:'DESCUENTO',valor:0,razon:''});setShowAjusteModal(true);}} className="text-cyan-400 hover:text-white px-3 py-1.5 bg-cyan-900/20 hover:bg-cyan-600 rounded-lg text-sm border border-cyan-900/50 transition-colors flex items-center gap-1"><Settings size={14}/> Ajustes</button>
-        <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>
-        {calculateCurrentBalance() === 0 && (
-          <button onClick={handleLiquidarCredito} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600 rounded-lg text-sm border border-slate-600 transition-colors flex items-center gap-1">✓ Liquidar</button>
-        )}
-        <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1"><Trash2 size={14}/>Eliminar</button>
-        <button onClick={()=>setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">Cerrar</button>
-      </div>
-    </div>
+                  <div className="lg:col-span-3 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
+                    <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
+                      <div>
+                        <h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2>
+                        <p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p>
+                        {selectedLoan.status==='CASTIGADO' && (
+                          <div className="mt-2 flex items-center gap-2 bg-rose-900/20 border border-rose-700/50 rounded-lg px-3 py-1.5">
+                            <span className="text-rose-400 text-xs font-bold">⚠️ CARTERA INCOBRABLE</span>
+                            <span className="text-rose-300 text-xs">· {selectedLoan.castigo_razon}</span>
+                            <span className="text-rose-400 text-xs font-mono">· {formatCurrency(selectedLoan.castigo_monto)}</span>
+                            <span className="text-slate-500 text-xs">· {selectedLoan.castigo_fecha}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <GeneradorPagare loan={selectedLoan} installments={loanInstallments} />
+                        <button onClick={calculatePazYSalvo} className="text-emerald-400 hover:text-white px-3 py-1.5 bg-emerald-900/20 hover:bg-emerald-600 rounded-lg text-sm border border-emerald-900/50 transition-colors flex items-center gap-1"><DollarSign size={14}/>Paz y Salvo</button>
+                        <button onClick={generarEstadoCuenta} className="text-blue-400 hover:text-white px-3 py-1.5 bg-blue-900/20 hover:bg-blue-600 rounded-lg text-sm border border-blue-900/50 transition-colors flex items-center gap-1"><FileText size={14}/>Estado de Cuenta</button>
+                        <button onClick={()=>{setRefinanciarParams({desembolsoAdicional:0,nuevaTasa:Number(selectedLoan.interest_rate_monthly??selectedLoan.nominal_rate_mv??0),nuevaCuota:Number(selectedLoan.fixed_quota_amount||0)+Number(selectedLoan.monthly_insurance||0),nuevoSeguro:Number(selectedLoan.monthly_insurance||0),nuevosPlazo:12,razon:''});fetchHistorialRefinanciaciones(selectedLoan.id);setShowRefinanciarModal(true);}} className="text-violet-400 hover:text-white px-3 py-1.5 bg-violet-900/20 hover:bg-violet-600 rounded-lg text-sm border border-violet-900/50 transition-colors flex items-center gap-1"><TrendingUp size={14}/> Refinanciar</button>
+                        <button onClick={()=>{setAjusteParams({instalmentIds:[],tipoAjuste:'TOTAL',tipoCalculo:'MONTO',operacion:'DESCUENTO',valor:0,razon:''});setShowAjusteModal(true);}} className="text-cyan-400 hover:text-white px-3 py-1.5 bg-cyan-900/20 hover:bg-cyan-600 rounded-lg text-sm border border-cyan-900/50 transition-colors flex items-center gap-1"><Settings size={14}/> Ajustes</button>
+                        <button onClick={()=>{setRestructuringParams({nuevaTasa:Number(selectedLoan.interest_rate_monthly||selectedLoan.nominal_rate_mv||0),nuevosPlazo:12,capitalizarMora:false});setShowRestructuringModal(true);}} className="text-amber-400 hover:text-white px-3 py-1.5 bg-amber-900/20 hover:bg-amber-600 rounded-lg text-sm border border-amber-900/50 transition-colors flex items-center gap-1"><Settings size={14}/>Reestructurar</button>
+                        <button onClick={()=>{setCastigarParams({monto:calculateCurrentBalance(),razon:'',fecha:new Date().toISOString().split('T')[0]});setShowCastigarModal(true);}} className="text-rose-400 hover:text-white px-3 py-1.5 bg-rose-900/20 hover:bg-rose-700 rounded-lg text-sm border border-rose-900/50 transition-colors flex items-center gap-1">⚠️ Castigar</button>
+                        {calculateCurrentBalance() === 0 && selectedLoan.status !== 'CASTIGADO' && (
+                          <button onClick={handleLiquidarCredito} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600 rounded-lg text-sm border border-slate-600 transition-colors flex items-center gap-1">✓ Liquidar</button>
+                        )}
+                        <button onClick={handleDeleteLoan} className="text-red-400 hover:text-white px-3 py-1.5 bg-red-900/20 hover:bg-red-600 rounded-lg text-sm border border-red-900/50 transition-colors flex items-center gap-1"><Trash2 size={14}/>Eliminar</button>
+                        <button onClick={()=>setSelectedLoan(null)} className="text-slate-400 hover:text-white px-3 py-1.5 bg-slate-800 rounded-lg text-sm border border-slate-700 transition-colors">Cerrar</button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-3 gap-4 mb-6">
                       <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700/30"><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Original</p><p className="text-lg font-bold text-white font-mono">{formatCurrency(selectedLoan.principal_amount||selectedLoan.loan_amount)}</p></div>
                       <div className="bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/20"><p className="text-xs text-emerald-500 uppercase tracking-wider mb-1">Saldo Vivo Actual</p><p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(calculateCurrentBalance())}</p></div>
@@ -928,55 +802,48 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                           <tbody className="divide-y divide-slate-700/50 text-xs">
                             {(()=>{
                               const refinanciacionAcumulada = Number(selectedLoan.refinanciacion_acumulada || 0);
-let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
-let refinanciacionApplied = false;
-                              return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index)=>{
+                              let tempBal = Number(selectedLoan.principal_amount||selectedLoan.loan_amount) + Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0);
+                              let refinanciacionApplied = false;
+                              return loanInstallments.filter(i=>i.status!=='PAID_EARLY').map((inst,index,arr)=>{
+                                if (!refinanciacionApplied && refinanciacionAcumulada > 0 && index > 0) {
+                                  const prev = arr[index-1];
+                                  if ((prev.status==='PAID'||prev.status==='LATE') && inst.status==='PENDING') { tempBal += refinanciacionAcumulada; refinanciacionApplied = true; }
+                                }
                                 const si=tempBal;
-const ajusteAmt = Number(inst.ajuste_amount || 0);
-const ajusteTipo = inst.ajuste_tipo || 'TOTAL';
-const saldoAjuste = ajusteTipo === 'CAPITAL' && ajusteAmt < 0 ? ajusteAmt : 0;
-let sf = Math.max(si - Number(inst.principal_portion) + saldoAjuste, 0);
-tempBal=sf;
+                                const ajusteAmt = Number(inst.ajuste_amount || 0);
+                                const ajusteTipo = inst.ajuste_tipo || 'TOTAL';
+                                const saldoAjuste = ajusteTipo === 'CAPITAL' && ajusteAmt < 0 ? ajusteAmt : 0;
+                                let sf = Math.max(si - Number(inst.principal_portion) + saldoAjuste, 0);
+                                tempBal=sf;
                                 const costos=index===0?Number(selectedLoan.associated_costs||selectedLoan.origination_costs||0):0;
                                 const vr=Number(inst.expected_amount);
                                 return (
                                   <tr key={inst.id} className="hover:bg-slate-800/50 transition-colors">
-                                    <td className="p-3 text-slate-300 font-mono text-center">{inst.installment_number}</td>
-                                    <td className="p-3 text-slate-400">{inst.actual_payment_date||inst.expected_payment_date}</td>
-                                    <td className="p-3 text-slate-400 text-right tabular-nums">{formatCurrency(si)}</td>
-                                    <td className="p-3 text-slate-400 text-right tabular-nums">{costos>0?formatCurrency(costos):'--'}</td>
-                                    <td className={`p-3 text-right tabular-nums ${Number(inst.principal_portion)<0?'text-red-400':'text-slate-200'}`}>{formatCurrency(inst.principal_portion)}</td>
-                                    <td className="p-3 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
-                                    <td className="p-3 text-slate-400 text-right tabular-nums">{Number(inst.insurance_portion||0)>0?formatCurrency(inst.insurance_portion):'--'}</td>
-                                    <td className="p-3 text-red-400/80 text-right tabular-nums">{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
-                                    <td className={`p-3 text-right tabular-nums ${Number(inst.ajuste_amount||0)<0?'text-red-400':Number(inst.ajuste_amount||0)>0?'text-green-400':'text-slate-600'}`}>{Number(inst.ajuste_amount||0)!==0?(Number(inst.ajuste_amount)>0?'+':'')+formatCurrency(Number(inst.ajuste_amount)):'--'}</td>
-                                    <td className="p-3 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(vr)}</td>
-                                    <td className="p-3 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
-                                    <td className="p-3 text-center">{getStatusBadge(inst.status)}</td>
-                                    <td className="p-3 text-center min-w-[140px]">
-  {inst.status === 'PENDING' ? (
-    <div className="flex gap-1">
-      <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
-      <button
-        onClick={() => { setNotifData({ phone: '', installment: inst }); setShowNotifModal(true); }}
-        className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/50 rounded-lg text-xs transition-colors"
-        title="Enviar recordatorio WhatsApp"
-      >
-        💬
-      </button>
-    </div>
-  ) : (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
-      <button
-        onClick={() => { setInstallmentToRevert(inst); setShowReversalModal(true); }}
-        className="px-2 py-0.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 rounded text-xs transition-colors"
-      >
-        Reversar
-      </button>
-    </div>
-  )}
-</td>
+                                    <td className="px-2 py-1.5 text-slate-300 font-mono text-center">{inst.installment_number}</td>
+                                    <td className="px-2 py-1.5 text-slate-400">{inst.actual_payment_date||inst.expected_payment_date}</td>
+                                    <td className="px-2 py-1.5 text-slate-400 text-right tabular-nums">{formatCurrency(si)}</td>
+                                    <td className="px-2 py-1.5 text-slate-400 text-right tabular-nums">{costos>0?formatCurrency(costos):'--'}</td>
+                                    <td className={`px-2 py-1.5 text-right tabular-nums ${Number(inst.principal_portion)<0?'text-red-400':'text-slate-200'}`}>{formatCurrency(inst.principal_portion)}</td>
+                                    <td className="px-2 py-1.5 text-amber-400/80 text-right tabular-nums">{formatCurrency(inst.interest_portion)}</td>
+                                    <td className="px-2 py-1.5 text-slate-400 text-right tabular-nums">{Number(inst.insurance_portion||0)>0?formatCurrency(inst.insurance_portion):'--'}</td>
+                                    <td className="px-2 py-1.5 text-red-400/80 text-right tabular-nums">{inst.late_fee_charged>0?formatCurrency(inst.late_fee_charged):'--'}</td>
+                                    <td className={`px-2 py-1.5 text-right tabular-nums ${Number(inst.ajuste_amount||0)<0?'text-red-400':Number(inst.ajuste_amount||0)>0?'text-green-400':'text-slate-600'}`}>{Number(inst.ajuste_amount||0)!==0?(Number(inst.ajuste_amount)>0?'+':'')+formatCurrency(Number(inst.ajuste_amount)):'--'}</td>
+                                    <td className="px-2 py-1.5 font-bold text-emerald-400 text-right tabular-nums">{formatCurrency(vr)}</td>
+                                    <td className="px-2 py-1.5 text-slate-400 text-right tabular-nums font-medium">{formatCurrency(sf)}</td>
+                                    <td className="px-2 py-1.5 text-center">{getStatusBadge(inst.status)}</td>
+                                    <td className="px-2 py-1.5 text-center min-w-[120px]">
+                                      {inst.status === 'PENDING' ? (
+                                        <div className="flex gap-1">
+                                          <button onClick={() => openPaymentModal(inst)} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/50 rounded-lg text-xs font-semibold transition-colors">Cobrar</button>
+                                          <button onClick={() => { setNotifData({ phone: '', installment: inst }); setShowNotifModal(true); }} className="px-2 py-1 bg-blue-500/20 hover:bg-blue-500 text-blue-400 hover:text-white border border-blue-500/50 rounded-lg text-xs transition-colors" title="Enviar recordatorio WhatsApp">💬</button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="text-emerald-500 font-mono font-bold text-xs">{formatCurrency(inst.actual_amount_paid)}</span>
+                                          <button onClick={() => { setInstallmentToRevert(inst); setShowReversalModal(true); }} className="px-2 py-0.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 rounded text-xs transition-colors">Reversar</button>
+                                        </div>
+                                      )}
+                                    </td>
                                   </tr>
                                 );
                               });
@@ -1017,9 +884,7 @@ tempBal=sf;
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <div className="px-2 py-1 bg-slate-700/50 text-slate-300 rounded text-xs">{app.status}</div>
-                          {sc && sc!=='PENDIENTE' && (
-                            <div className={`px-2 py-1 rounded text-xs font-bold ${scoreColor}`}>{scoreIcon} {sc} {app.credit_score}/100</div>
-                          )}
+                          {sc && sc!=='PENDIENTE' && <div className={`px-2 py-1 rounded text-xs font-bold ${scoreColor}`}>{scoreIcon} {sc} {app.credit_score}/100</div>}
                         </div>
                       </div>
                     </div>
@@ -1035,9 +900,7 @@ tempBal=sf;
                       <p className="text-slate-300"><strong>Cédula:</strong> {selectedApp.id_number}</p>
                       <p className="text-slate-300 font-mono"><strong>Monto:</strong> ${Number(selectedApp.credit_amount).toLocaleString('es-CO')}</p>
                     </div>
-                    {selectedApp.score_result && selectedApp.score_result !== 'PENDIENTE' && (
-                      <ScoreCard app={selectedApp} onSaveObservacion={(obs) => console.log('obs', obs)} />
-                    )}
+                    {selectedApp.score_result && selectedApp.score_result !== 'PENDIENTE' && <ScoreCard app={selectedApp} onSaveObservacion={(obs) => console.log('obs', obs)} />}
                     {selectedApp.id_front_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Frontal</p><img src={selectedApp.id_front_image} className="w-full rounded-xl"/></div>}
                     {selectedApp.id_back_image&&<div className="mb-4"><p className="text-xs text-slate-500 mb-1">Cédula Reverso</p><img src={selectedApp.id_back_image} className="w-full rounded-xl"/></div>}
                     {selectedApp.selfie_image&&<div className="mb-6"><p className="text-xs text-slate-500 mb-1">Selfie</p><img src={selectedApp.selfie_image} className="w-full rounded-xl"/></div>}
@@ -1049,18 +912,14 @@ tempBal=sf;
                     )}
                     {selectedApp.status==='REJECTED' && (
                       <div className="space-y-3 pt-6 border-t border-slate-700/50">
-                        <button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2">
-                          <Trash2 size={16}/> Eliminar Permanentemente
-                        </button>
+                        <button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/> Eliminar Permanentemente</button>
                       </div>
                     )}
                     {selectedApp.status==='APPROVED' && (
-  <div className="space-y-3 pt-6 border-t border-slate-700/50">
-    <button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2">
-      <Trash2 size={16}/> Eliminar Solicitud
-    </button>
-  </div>
-)}
+                      <div className="space-y-3 pt-6 border-t border-slate-700/50">
+                        <button onClick={()=>handleDeleteApplication(selectedApp.id)} className="w-full bg-slate-800 hover:bg-red-900/50 text-red-400 py-2 rounded-xl text-sm font-bold border border-red-900/50 transition-colors flex items-center justify-center gap-2"><Trash2 size={16}/> Eliminar Solicitud</button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-8 text-center text-slate-500">Selecciona una solicitud para ver detalles</div>
@@ -1069,8 +928,10 @@ tempBal=sf;
             </div>
           </>
         )}
-        </div>
-        {showRefinanciarModal&&selectedLoan&&(
+      </div>
+
+      {/* MODAL REFINANCIACIÓN */}
+      {showRefinanciarModal&&selectedLoan&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
             <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><TrendingUp className="text-violet-400"/>Refinanciación</h2>
@@ -1087,38 +948,31 @@ tempBal=sf;
                 <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label><input type="number" min="1" value={refinanciarParams.nuevosPlazo||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevosPlazo:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: 12"/></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">Cuota calculada (automático)</label><div className="w-full bg-slate-700/50 border border-emerald-500/30 rounded-xl px-4 py-2 text-emerald-400 font-mono font-bold">{refinanciarParams.nuevaTasa>0&&refinanciarParams.nuevosPlazo>0?formatCurrency(Math.round((calculateCurrentBalance()+refinanciarParams.desembolsoAdicional)*(refinanciarParams.nuevaTasa/100*Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo))/(Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo)-1))+refinanciarParams.nuevoSeguro):'Ingresa tasa y plazo'}</div></div>
+                <div><label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">Cuota calculada</label><div className="w-full bg-slate-700/50 border border-emerald-500/30 rounded-xl px-4 py-2 text-emerald-400 font-mono font-bold">{refinanciarParams.nuevaTasa>0&&refinanciarParams.nuevosPlazo>0?formatCurrency(Math.round((calculateCurrentBalance()+refinanciarParams.desembolsoAdicional)*(refinanciarParams.nuevaTasa/100*Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo))/(Math.pow(1+refinanciarParams.nuevaTasa/100,refinanciarParams.nuevosPlazo)-1))+refinanciarParams.nuevoSeguro):'Ingresa tasa y plazo'}</div></div>
                 <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Seguro Mensual ($)</label><input type="number" min="0" value={refinanciarParams.nuevoSeguro||''} onChange={e=>setRefinanciarParams(p=>({...p,nuevoSeguro:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="0 si no aplica"/></div>
               </div>
-              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razon</label><input type="text" value={refinanciarParams.razon} onChange={e=>setRefinanciarParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: Ampliacion de credito por buen comportamiento"/></div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razón</label><input type="text" value={refinanciarParams.razon} onChange={e=>setRefinanciarParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-violet-500" placeholder="Ej: Ampliación de crédito"/></div>
             </div>
-            {refinanciarParams.nuevaCuota>0&&refinanciarParams.nuevosPlazo>0&&(
-              <div className="bg-violet-500/10 border border-violet-500/30 rounded-xl p-3 mb-4 space-y-1">
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Nuevo saldo total:</span><span className="text-violet-400 font-mono font-bold">{formatCurrency(calculateCurrentBalance()+refinanciarParams.desembolsoAdicional)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Nueva cuota:</span><span className="text-violet-400 font-mono">{formatCurrency(refinanciarParams.nuevaCuota)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-400">Plazo:</span><span className="text-violet-400">{refinanciarParams.nuevosPlazo} meses</span></div>
-              </div>
-            )}
             {historialRefinanciaciones.length>0&&(
               <div className="bg-slate-800/50 rounded-xl p-3 mb-4">
                 <p className="text-xs font-bold text-slate-400 uppercase mb-2">Historial de refinanciaciones</p>
                 {historialRefinanciaciones.map(r=>(
                   <div key={r.id} className="flex justify-between text-xs text-slate-300 py-1 border-b border-slate-700/50 last:border-0">
-                    <span>{r.fecha}</span>
-                    <span className="text-emerald-400 font-mono">+{formatCurrency(r.desembolso_adicional)}</span>
-                    <span className="text-slate-400">{r.nueva_tasa}% MV</span>
+                    <span>{r.fecha}</span><span className="text-emerald-400 font-mono">+{formatCurrency(r.desembolso_adicional)}</span><span className="text-slate-400">{r.nueva_tasa}% MV</span>
                   </div>
                 ))}
               </div>
             )}
             <div className="flex gap-3">
               <button onClick={()=>setShowRefinanciarModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
-              <button onClick={handleRefinanciar} disabled={!refinanciarParams.nuevaTasa||!refinanciarParams.nuevaCuota||!refinanciarParams.nuevosPlazo} className="flex-1 px-4 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Refinanciación</button>
+              <button onClick={handleRefinanciar} disabled={!refinanciarParams.nuevaTasa||!refinanciarParams.nuevosPlazo} className="flex-1 px-4 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Refinanciación</button>
             </div>
           </div>
         </div>
       )}
-        {showAjusteModal&&selectedLoan&&(
+
+      {/* MODAL AJUSTE */}
+      {showAjusteModal&&selectedLoan&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-lg p-6">
             <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Settings className="text-cyan-400"/>Aplicar Ajuste</h2>
@@ -1136,38 +990,13 @@ tempBal=sf;
                 </label>
               ))}
             </div>
-            <div className="mb-3">
-              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Operación</label>
-              <select value={ajusteParams.operacion} onChange={e=>setAjusteParams(p=>({...p,operacion:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
-                <option value="DESCUENTO">Descuento (reduce la cuota)</option>
-                <option value="RECARGO">Recargo (aumenta la cuota)</option>
-              </select>
-            </div>
+            <div className="mb-3"><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Operación</label><select value={ajusteParams.operacion} onChange={e=>setAjusteParams(p=>({...p,operacion:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm"><option value="DESCUENTO">Descuento</option><option value="RECARGO">Recargo</option></select></div>
             <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tipo</label>
-                <select value={ajusteParams.tipoCalculo} onChange={e=>setAjusteParams(p=>({...p,tipoCalculo:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
-                  <option value="MONTO">Monto fijo ($)</option>
-                  <option value="PORCENTAJE">Porcentaje (%)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Aplica sobre</label>
-                <select value={ajusteParams.tipoAjuste} onChange={e=>setAjusteParams(p=>({...p,tipoAjuste:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm">
-                  <option value="TOTAL">Total cuota</option>
-                  <option value="CAPITAL">Solo capital</option>
-                  <option value="INTERES">Solo interes</option>
-                </select>
-              </div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tipo</label><select value={ajusteParams.tipoCalculo} onChange={e=>setAjusteParams(p=>({...p,tipoCalculo:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm"><option value="MONTO">Monto fijo ($)</option><option value="PORCENTAJE">Porcentaje (%)</option></select></div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Aplica sobre</label><select value={ajusteParams.tipoAjuste} onChange={e=>setAjusteParams(p=>({...p,tipoAjuste:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-white outline-none focus:border-cyan-500 text-sm"><option value="TOTAL">Total cuota</option><option value="CAPITAL">Solo capital</option><option value="INTERES">Solo interes</option></select></div>
             </div>
-            <div className="mb-3">
-              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Valor del ajuste</label>
-              <input type="number" min="0" value={ajusteParams.valor||''} onChange={e=>setAjusteParams(p=>({...p,valor:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder={ajusteParams.tipoCalculo==='PORCENTAJE'?'Ej: 10':'Ej: 200000'}/>
-            </div>
-            <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razon del ajuste</label>
-              <input type="text" value={ajusteParams.razon} onChange={e=>setAjusteParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder="Ej: Acuerdo de cierre, buen cliente..."/>
-            </div>
+            <div className="mb-3"><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Valor del ajuste</label><input type="number" min="0" value={ajusteParams.valor||''} onChange={e=>setAjusteParams(p=>({...p,valor:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder={ajusteParams.tipoCalculo==='PORCENTAJE'?'Ej: 10':'Ej: 200000'}/></div>
+            <div className="mb-4"><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razón del ajuste</label><input type="text" value={ajusteParams.razon} onChange={e=>setAjusteParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder="Ej: Acuerdo de cierre..."/></div>
             <div className="flex gap-3">
               <button onClick={()=>setShowAjusteModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
               <button onClick={handleAplicarAjuste} disabled={ajusteParams.instalmentIds.length===0||!ajusteParams.valor||!ajusteParams.razon.trim()} className="flex-1 px-4 py-3 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">Aplicar Ajuste</button>
@@ -1175,6 +1004,7 @@ tempBal=sf;
           </div>
         </div>
       )}
+
       {/* MODAL REVERSIÓN */}
       {showReversalModal&&installmentToRevert&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1210,7 +1040,7 @@ tempBal=sf;
               <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nuevo Plazo (meses)</label><input type="number" min="1" value={restructuringParams.nuevosPlazo||''} onChange={e=>setRestructuringParams(p=>({...p,nuevosPlazo:Number(e.target.value)}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500" placeholder="Ej: 12"/></div>
               <label className="flex items-center gap-3 p-3 bg-slate-800/50 border border-slate-700 rounded-xl cursor-pointer hover:border-amber-500/50 transition-colors">
                 <input type="checkbox" checked={restructuringParams.capitalizarMora} onChange={e=>setRestructuringParams(p=>({...p,capitalizarMora:e.target.checked}))} className="h-4 w-4 text-amber-500"/>
-                <div><p className="text-sm text-slate-200 font-medium">Capitalizar mora acumulada</p><p className="text-xs text-slate-500">Suma la mora al capital — el cliente no paga mora hoy pero aumenta su deuda</p></div>
+                <div><p className="text-sm text-slate-200 font-medium">Capitalizar mora acumulada</p><p className="text-xs text-slate-500">Suma la mora al capital</p></div>
               </label>
             </div>
             {restructuringParams.nuevaTasa>0&&restructuringParams.nuevosPlazo>0&&(
@@ -1224,6 +1054,29 @@ tempBal=sf;
             <div className="flex gap-3">
               <button onClick={()=>setShowRestructuringModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
               <button onClick={handleAplicarReestructuracion} className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl transition-colors font-bold">Aplicar Reestructuración</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CASTIGO */}
+      {showCastigarModal&&selectedLoan&&(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-white mb-2">⚠️ Cartera Incobrable</h2>
+            <p className="text-slate-400 text-sm mb-6">Castigar crédito de <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Saldo actual:</span><span className="text-white font-mono font-bold">{formatCurrency(calculateCurrentBalance())}</span></div>
+            </div>
+            <div className="space-y-4 mb-6">
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Fecha del castigo</label><input type="date" value={castigarParams.fecha} onChange={e=>setCastigarParams(p=>({...p,fecha:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-rose-500"/></div>
+              <div><label className="block text-xs font-semibold text-rose-400 uppercase mb-1">Monto incobrable ($)</label><input type="number" value={castigarParams.monto||''} onChange={e=>setCastigarParams(p=>({...p,monto:Number(e.target.value)}))} className="w-full bg-slate-800 border border-rose-500/50 rounded-xl px-4 py-2.5 text-white font-mono outline-none focus:border-rose-500"/></div>
+              <div><label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Razón del castigo</label><input type="text" value={castigarParams.razon} onChange={e=>setCastigarParams(p=>({...p,razon:e.target.value}))} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-rose-500" placeholder="Ej: Cliente insolvente, deuda prescrita..."/></div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-red-400">Las cuotas pendientes serán canceladas y el crédito quedará archivado como incobrable.</p></div>
+            <div className="flex gap-3">
+              <button onClick={()=>setShowCastigarModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleCastigarCredito} className="flex-1 px-4 py-3 bg-rose-700 hover:bg-rose-600 text-white rounded-xl transition-colors font-bold">Confirmar Castigo</button>
             </div>
           </div>
         </div>
@@ -1253,22 +1106,29 @@ tempBal=sf;
         </div>
       )}
 
-      {/* MODAL NOTIFICACIÓN */}
-      {showNotificationModal&&notificationInstallment&&selectedLoan&&(
+      {/* MODAL NOTIFICACIÓN WHATSAPP */}
+      {showNotifModal&&notifData.installment&&selectedLoan&&(
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
-            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2"><Phone className="text-blue-400"/>Enviar Notificación WhatsApp</h2>
-            <p className="text-slate-400 text-sm mb-6">Recordatorio de pago para <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
-            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 space-y-2 mb-4">
-              <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota:</span><span className="text-slate-200">#{notificationInstallment.installment_number}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-slate-400">Monto:</span><span className="text-emerald-400 font-mono font-bold">{formatCurrency(notificationInstallment.expected_amount)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-slate-400">Vence:</span><span className="text-slate-200">{new Date(notificationInstallment.expected_payment_date).toLocaleDateString('es-CO')}</span></div>
+            <h2 className="text-xl font-bold text-white mb-2">💬 Recordatorio WhatsApp</h2>
+            <p className="text-slate-400 text-sm mb-6">Enviar recordatorio a <span className="text-white font-semibold">{selectedLoan.client_name}</span></p>
+            <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 mb-4 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Cuota:</span><span className="text-slate-200">#{notifData.installment.installment_number}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Vencimiento:</span><span className="text-slate-200">{notifData.installment.expected_payment_date}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-slate-400">Monto:</span><span className="text-emerald-400 font-mono font-bold">{formatCurrency(notifData.installment.expected_amount)}</span></div>
             </div>
-            <div className="mb-6"><label className="block text-xs font-semibold text-slate-400 uppercase mb-2">WhatsApp del cliente</label><input type="tel" value={notificationPhone} onChange={e=>setNotificationPhone(e.target.value)} placeholder="+573001234567" className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500 font-mono"/><p className="text-xs text-slate-500 mt-1">Ejemplo Colombia: +573001234567</p></div>
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-6"><p className="text-xs text-blue-400">El cliente debe haber enviado previamente un mensaje al número de Twilio Sandbox.</p></div>
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">WhatsApp del cliente</label>
+              <input type="tel" value={notifData.phone} onChange={e=>setNotifData(p=>({...p,phone:e.target.value}))} placeholder="+573001234567" className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white outline-none focus:border-emerald-500"/>
+              <p className="text-xs text-slate-500 mt-1">Colombia: +57 seguido del número sin el 0 inicial</p>
+            </div>
+            <div className="bg-green-900/20 border border-green-700/30 rounded-xl p-3 mb-6">
+              <p className="text-xs text-green-400 font-semibold mb-1">Vista previa:</p>
+              <p className="text-xs text-slate-300 whitespace-pre-line">{`Hola ${selectedLoan.client_name} 👋\n\nTu cuota con Simbiosis por $${Number(notifData.installment.expected_amount).toLocaleString('es-CO')} vence el ${new Date(notifData.installment.expected_payment_date).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})}.\n\nPaga a tiempo y evita intereses de mora.\n\nSimbiosis — conoce, invierte, crece`}</p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={()=>{setShowNotificationModal(false);setNotificationPhone('');setNotificationInstallment(null);}} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
-              <button onClick={handleEnviarNotificacion} disabled={!notificationPhone||sendingNotification} className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">{sendingNotification?'Enviando...':'Enviar WhatsApp'}</button>
+              <button onClick={()=>setShowNotifModal(false)} className="flex-1 px-4 py-3 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 transition-colors font-medium">Cancelar</button>
+              <button onClick={handleEnviarNotificacion} disabled={!notifData.phone||sendingNotif} className="flex-1 px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl transition-colors font-bold disabled:opacity-50">{sendingNotif?'Enviando...':'📤 Enviar WhatsApp'}</button>
             </div>
           </div>
         </div>
@@ -1287,14 +1147,15 @@ tempBal=sf;
                 <div className="flex justify-between text-sm"><span className="text-slate-400">Mora Calculada:</span><span className={paymentData.lateFee>0?'text-red-400 font-mono':'text-slate-400 font-mono'}>+ {formatCurrency(paymentData.lateFee)}</span></div>
                 <div className="border-t border-slate-800 pt-2 flex justify-between"><span className="text-slate-300 font-bold">Mínimo a Pagar:</span><span className="text-emerald-500 font-mono font-bold">{formatCurrency(Number(selectedInstallment.expected_amount)+paymentData.lateFee)}</span></div>
               </div>
-              <div><label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">2. Monto Real Recibido</label>
+              <div>
+                <label className="block text-xs font-semibold text-emerald-400 uppercase mb-1">2. Monto Real Recibido</label>
                 <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500"/><input type="number" value={paymentData.actualAmount||''} onChange={e=>setPaymentData({...paymentData,actualAmount:Number(e.target.value)})} className="w-full bg-slate-800 border border-emerald-500/50 rounded-xl pl-10 pr-3 py-3 text-white font-mono text-lg focus:border-emerald-400 outline-none" placeholder="Ej: 600000"/></div>
                 {paymentData.actualAmount>(Number(selectedInstallment.expected_amount)+paymentData.lateFee)&&(
                   <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                     <p className="text-xs text-emerald-400 mb-3 font-semibold flex items-center gap-1"><Sparkles size={14}/>Abono extra de {formatCurrency(paymentData.actualAmount-(Number(selectedInstallment.expected_amount)+paymentData.lateFee))}. ¿Cómo aplicar?</p>
                     <div className="flex flex-col gap-3">
-                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_TIME" checked={paymentData.extraPaymentType==='REDUCE_TIME'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"/>Reducir Plazo</label>
-                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_QUOTA" checked={paymentData.extraPaymentType==='REDUCE_QUOTA'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 focus:ring-emerald-500 h-4 w-4"/>Reducir Cuota</label>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_TIME" checked={paymentData.extraPaymentType==='REDUCE_TIME'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 h-4 w-4"/>Reducir Plazo</label>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer p-2 hover:bg-slate-800 rounded-lg"><input type="radio" name="extraPaymentStrategy" value="REDUCE_QUOTA" checked={paymentData.extraPaymentType==='REDUCE_QUOTA'} onChange={e=>setPaymentData({...paymentData,extraPaymentType:e.target.value})} className="text-emerald-500 h-4 w-4"/>Reducir Cuota</label>
                     </div>
                   </div>
                 )}
@@ -1310,4 +1171,3 @@ tempBal=sf;
     </div>
   );
 }
-    
