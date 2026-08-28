@@ -808,8 +808,8 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
             {carteraView==='indicadores' && <IndicadoresCartera/>}
 
             {carteraView==='creditos' && (
-              <div className="grid lg:grid-cols-3 gap-6">
-                <div className={`${selectedLoan?'lg:col-span-1':'lg:col-span-3'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
+              <div className="grid lg:grid-cols-4 gap-6">
+                <div className={`${selectedLoan?'lg:col-span-1':'lg:col-span-4'} bg-slate-800/40 border border-slate-700/50 rounded-2xl overflow-hidden transition-all`}>
                   <div className="p-6 border-b border-slate-700/50">
                     <h2 className="text-xl font-bold text-white mb-4">Créditos Otorgados</h2>
                     {!selectedLoan && <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4 flex justify-between"><div><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Capital Colocado</p><p className="text-xl font-bold text-emerald-400 font-mono">{formatCurrency(activeLoans.reduce((s,l)=>s+Number(l.principal_amount||l.loan_amount),0))}</p></div><div className="text-right"><p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Créditos Activos</p><p className="text-xl font-bold text-slate-200 font-mono">{activeLoans.length}</p></div></div>}
@@ -837,7 +837,7 @@ insurance_portion: insurance, principal_portion: principal, interest_portion: in
                 </div>
 
                 {selectedLoan && (
-  <div className="lg:col-span-2 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
+  <div className="lg:col-span-3 bg-slate-800/40 border border-slate-700/50 rounded-2xl p-6">
     <div className="flex justify-between items-start mb-6 border-b border-slate-700/50 pb-4">
       <div><h2 className="text-2xl font-bold text-white">{selectedLoan.client_name}</h2><p className="text-slate-400 text-sm">ID: {selectedLoan.client_id_number||selectedLoan.client_id} | Desembolso: {new Date(selectedLoan.disbursement_date).toLocaleDateString()}</p></div>
       <div className="flex gap-2 flex-wrap">
