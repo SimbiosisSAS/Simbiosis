@@ -140,10 +140,17 @@ const ScoreCard = ({ app, onSaveObservacion }: { app: any; onSaveObservacion?: (
 
   const fetchActiveLoans = async (includeLiquidados = false) => {
   setLoading(true);
-  let query = supabase.from('active_loans').select('*').order('created_at', { ascending: false });
+  let query = supabase.from('active_loans').select('*');
   if (!includeLiquidados) query = query.neq('status', 'LIQUIDADO');
   const { data, error } = await query;
-  if (!error) setActiveLoans(data || []);
+  if (!error) {
+    const sorted = (data || []).sort((a, b) => {
+      const numA = parseInt(a.loan_number?.replace(/\D/g, '') || '0', 10);
+      const numB = parseInt(b.loan_number?.replace(/\D/g, '') || '0', 10);
+      return numA - numB;
+    });
+    setActiveLoans(sorted);
+  }
   setLoading(false);
 };
 
