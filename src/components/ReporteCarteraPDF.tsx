@@ -30,13 +30,24 @@ export default function ReporteCarteraPDF() {
     if (totalInvertido <= 0) { alert('Ingresa el capital invertido.'); return; }
     setGenerating(true);
     try {
-      const [loansRes, instRes] = await Promise.all([
-  supabase.from('active_loans').select('*'),
-  supabase.from('loan_installments').select('*').range(0, 49999),
-]);
+      const { data: loansData } = await supabase.from('active_loans').select('*');
+const loans = loansData || [];
 
-      const loans = loansRes.data || [];
-      const installments = instRes.data || [];
+// Paginar para traer TODAS las cuotas sin límite
+let allInstallments: any[] = [];
+let from = 0;
+const PAGE_SIZE = 1000;
+while (true) {
+  const { data: pageData } = await supabase
+    .from('loan_installments')
+    .select('*')
+    .range(from, from + PAGE_SIZE - 1);
+  if (!pageData || pageData.length === 0) break;
+  allInstallments = [...allInstallments, ...pageData];
+  if (pageData.length < PAGE_SIZE) break;
+  from += PAGE_SIZE;
+}
+const installments = allInstallments;
 
       // ── SEPARAR POR STATUS ──────────────────────────────────────────────
       const activeLoans = loans.filter(l => l.status !== 'CASTIGADO' && l.status !== 'LIQUIDADO');
